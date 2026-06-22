@@ -1,0 +1,63 @@
+# ============================================================
+# 凤翎工坊 · .gitignore（开源脱敏）
+# 原则：密钥/个人/商业/垃圾一律不进 git；本地文件不删，只是不公开。
+# ============================================================
+
+# --- 🔴 密钥 / 运行配置（绝不进 git）---
+.ai_key
+.ai_model
+
+# --- macOS / IDE ---
+.DS_Store
+.claude/
+.vscode/
+
+# --- Python ---
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# --- 备份 / 临时 / 归档（开发垃圾）---
+_archive/
+tmp/
+*.bak
+chapters.json.bak
+
+# --- 误放的素材 / 截图工作区 ---
+微信图片_*.png
+
+# --- 美术中间稿（raw 原图非运行必需；游戏用的是 art/out/）---
+art/raw/
+
+# --- hero 开场动画实验稿（非运行必需，index.html 已内联最终版）---
+hero-*.html
+
+# --- 🟠 个人工作笔记（不开源）---
+CLAUDE.md
+面试*.md
+
+# --- 🟠 商业 / 市场 / 设计过程文档（不开源）---
+docs/audit-2026-06-10.md
+docs/ui-redesign-plan.md
+docs/架构v3-语义先行-设计讨论.md
+docs/编辑器生态调研-2026-06.md
+docs/worldmap-v2-设定包.md
+docs/业务流程图v3.md
+docs/业务流程图v4.md
+docs/需求调研提示词-市场验证.md
+docs/PRD-v0.1.md
+docs/PRD-v1.md
+docs/产品架构图v1.md
+docs/diagrams/
+/diagrams/
+
+# --- 验收指南（内部沟通口吻，依赖大量过程证据图）---
+docs/验收指南-M5M8-三系统与AI命令层.md
+
+# --- 开发过程证据截图（127 张 proof/cmp/final，体积大、对使用者价值低）---
+# README 配图单独放 docs/readme-assets/
+docs/screenshots/
+
+# --- 录屏抽帧（带浏览器全屏，暴露书签栏/标签页等个人隐私）---
+docs/screencast/
