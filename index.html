@@ -756,6 +756,7 @@
       <div class="cmd-log" id="edCmdLog"></div>
     </div>
     <div id="edSizes" class="hide"></div>
+    <div id="edMechanics" class="hide"></div>
     <div id="edTour" class="hide"></div>
     <div id="edToast" class="hide"></div>
   </div>
@@ -1249,6 +1250,24 @@
       }
       // debug:?sizes=1 自动打开角色尺寸工作台(用于截图验证)
       if (new URLSearchParams(location.search).get("sizes") === "1") setTimeout(openSizePanel, 300);
+      // 游戏机制:?mech=1 自动打开机制卡编辑器(截图) / ?simmech=1 新建机制→保存→验落盘(E2E,非破坏靠脚本备份还原)
+      if (new URLSearchParams(location.search).get("mech") === "1") setTimeout(openMechanicsPanel, 300);
+      if (new URLSearchParams(location.search).get("simmech") === "1" && !window.__simmechDone) {
+        window.__simmechDone = true;
+        setTimeout(async () => {
+          openMechanicsPanel();
+          const before = (ED.ch.triggers || []).length;
+          ED.mechDraft.push({ id: "mech_e2e", type: "enter", at: [9, 15], area: [8, 1], once: true, conditions: {}, actions: [{ type: "text", speaker: "", content: "E2E机制旁白" }, { type: "addClue", clueId: "clue_fogline" }] });
+          await saveMechanics();
+          await new Promise(r => setTimeout(r, 300));
+          let ok = false, after = before;
+          try { const fresh = await (await fetch("chapters.json?_=" + Date.now())).json(); const ch = fresh.chapters.find(c => c.id === ED.ch.id); after = (ch.triggers || []).length; ok = (ch.triggers || []).some(t => t.id === "mech_e2e" && (t.actions || []).length === 2); } catch (e) {}
+          const out = `SIMMECH before=${before} after=${after} saved=${ok} ${ok && after > before ? "PASS" : "FAIL"}`;
+          document.title = out;
+          const d = document.createElement("div"); d.id = "simMechOut"; d.textContent = out;
+          d.style.cssText = "position:fixed;top:0;left:0;z-index:99999;background:#000;color:#0f0;font:14px monospace;padding:8px"; document.body.appendChild(d);
+        }, 500);
+      }
       // F7-A:?autopublish=1 自动开发布卡(截图);=brokengate 临时坏门展示拦截卡(纯内存,不落盘)
       const autopub = new URLSearchParams(location.search).get("autopublish");
       if (autopub) setTimeout(() => {
@@ -1935,6 +1954,9 @@
         <div class="es-tool" id="esCompile"><span class="es-ic">⚙</span><span class="es-tx">编译通行</span></div>
         <div class="es-info" style="font-size:8px;opacity:.65;">${ED.room.semantics ? "✓ 已有语义层" : "未烘焙"}</div>` : ""}
         <div class="es-divider"></div>
+        <div class="es-label">逻辑</div>
+        <div class="es-tool" id="esMech"><span class="es-ic">⚡</span><span class="es-tx">机制</span></div>
+        <div class="es-divider"></div>
         <div class="es-label">全局</div>
         <div class="es-tool" id="esSizes"><span class="es-ic">📏</span><span class="es-tx">角色尺寸</span></div>
         <div class="es-divider"></div>
@@ -1945,6 +1967,7 @@
         b.onclick = () => { ED.brush = b.dataset.b; renderEditorBar(); };
       });
       const szBtn = $("#esSizes"); if (szBtn) szBtn.onclick = openSizePanel;
+      const mechBtn = $("#esMech"); if (mechBtn) mechBtn.onclick = openMechanicsPanel;
       // M8 语义层工具(双镜:walkable=编译产物的平台入口)
       const stBtn = $("#esStreets");
       if (stBtn) {
@@ -2108,6 +2131,112 @@
         } catch (e) { showEdToast("保存失败:" + e.message, true); }
       };
       renderRows(); renderPreview();
+    }
+
+    // ===== 游戏机制模块:机制卡编辑器(触发→条件→动作可视化,数据=chapters.json 的 triggers,零改运行时) =====
+    const MECH_TRIG = [["auto", "一进场就触发"], ["enter", "走进某区域"], ["leave", "离开某区域"]];
+    const MECH_ACTS = [["text", "💬 说旁白"], ["addClue", "📋 记一条线索"], ["giveItem", "🔑 给道具"], ["set", "🚩 设标志位"], ["fx", "✨ 播特效"]];
+    const MECH_FX = [["scanline_tear", "信号撕裂"], ["shake", "镜头震动"], ["flash", "闪光"]];
+    function mechEsc(s) { return String(s == null ? "" : s).replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;"); }
+    function openMechanicsPanel() {
+      if (!ED) return;
+      ED.mechDraft = JSON.parse(JSON.stringify(ED.ch.triggers || []));
+      const p = $("#edMechanics");
+      p.classList.remove("hide");
+      p.style.cssText = "position:fixed;inset:0;z-index:60;background:#05070bd8;display:flex;align-items:center;justify-content:center;";
+      renderMech();
+    }
+    function mechActionRow(a, mi, ai, clues) {
+      const opts = MECH_ACTS.map(([v, l]) => `<option value="${v}" ${a.type === v ? "selected" : ""}>${l}</option>`).join("");
+      let params = "";
+      if (a.type === "text") params = `<input type="text" data-actf="speaker" data-mi="${mi}" data-ai="${ai}" value="${mechEsc(a.speaker)}" placeholder="说话人(留空=旁白)" style="width:100px;"><input type="text" data-actf="content" data-mi="${mi}" data-ai="${ai}" value="${mechEsc(a.content)}" placeholder="台词/旁白" style="flex:1;min-width:120px;">`;
+      else if (a.type === "addClue") params = `<select data-actf="clueId" data-mi="${mi}" data-ai="${ai}" style="flex:1;">${clues.length ? clues.map(c => `<option value="${c.id}" ${a.clueId === c.id ? "selected" : ""}>${mechEsc(c.name)}</option>`).join("") : `<option value="">（本章暂无线索）</option>`}</select>`;
+      else if (a.type === "giveItem") params = `<input type="text" data-actf="itemId" data-mi="${mi}" data-ai="${ai}" value="${mechEsc(a.itemId)}" placeholder="道具id" style="width:96px;"><input type="text" data-actf="itemName" data-mi="${mi}" data-ai="${ai}" value="${mechEsc(a.itemName)}" placeholder="道具名" style="flex:1;">`;
+      else if (a.type === "set") params = `<input type="text" data-actf="flag" data-mi="${mi}" data-ai="${ai}" value="${mechEsc(a.flag)}" placeholder="标志名" style="flex:1;"><select data-actf="value" data-mi="${mi}" data-ai="${ai}"><option value="true" ${a.value !== false ? "selected" : ""}>设为真</option><option value="false" ${a.value === false ? "selected" : ""}>设为假</option></select>`;
+      else if (a.type === "fx") params = `<select data-actf="effect" data-mi="${mi}" data-ai="${ai}">${MECH_FX.map(([v, l]) => `<option value="${v}" ${a.effect === v ? "selected" : ""}>${l}</option>`).join("")}</select>`;
+      return `<div style="display:flex;gap:6px;align-items:center;margin-bottom:5px;background:#ffffff05;padding:6px 7px;border-radius:7px;">
+        <select data-acttype data-mi="${mi}" data-ai="${ai}" style="flex:0 0 auto;">${opts}</select>${params}
+        <button data-delact data-mi="${mi}" data-ai="${ai}" title="删动作" style="background:none;color:#c4444c;border:none;cursor:pointer;font-size:15px;">×</button></div>`;
+    }
+    function mechCard(t, i, clues) {
+      const trig = MECH_TRIG.map(([v, l]) => `<option value="${v}" ${t.type === v ? "selected" : ""}>${l}</option>`).join("");
+      const isArea = t.type === "enter" || t.type === "leave";
+      const c = t.conditions || {};
+      const ct = c.hasItem != null ? "item" : c.minClues != null ? "clues" : (c.flags && c.flags.length) ? "flag" : "none";
+      const acts = (t.actions || []).map((a, ai) => mechActionRow(a, i, ai, clues)).join("");
+      return `<div style="background:#ffffff06;border:1px solid #ffffff14;border-radius:11px;padding:12px;margin-bottom:10px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:9px;">
+          <span style="font:9px 'Courier New',monospace;color:#6fd3c4;letter-spacing:1px;">机制 ${String(i + 1).padStart(2, "0")}</span>
+          <label style="font-size:10px;color:#8893a0;display:flex;align-items:center;gap:4px;margin-left:auto;cursor:pointer;"><input type="checkbox" data-once="${i}" ${t.once ? "checked" : ""}> 只触发一次</label>
+          <button data-delmech="${i}" title="删机制" style="background:#c4444c22;color:#e88;border:none;border-radius:5px;width:22px;height:22px;cursor:pointer;">×</button>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:8px;">
+          <span style="font-size:11px;color:#ffb060;font-weight:700;width:28px;">当</span>
+          <select data-trigtype="${i}">${trig}</select>
+          <span style="font-size:10px;color:#8893a0;">位置</span><input type="text" data-at="${i}" value="${(t.at || []).join(',')}" placeholder="x,y" style="width:62px;">
+          ${isArea ? `<span style="font-size:10px;color:#8893a0;">范围</span><input type="text" data-area="${i}" value="${(t.area || [2, 2]).join(',')}" placeholder="宽,高" style="width:54px;">` : ""}
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:7px;align-items:center;margin-bottom:8px;">
+          <span style="font-size:11px;color:#ffb060;font-weight:700;width:28px;">如果</span>
+          <select data-condtype="${i}">
+            <option value="none" ${ct === "none" ? "selected" : ""}>无条件</option>
+            <option value="item" ${ct === "item" ? "selected" : ""}>持有道具</option>
+            <option value="clues" ${ct === "clues" ? "selected" : ""}>已有≥N条线索</option>
+            <option value="flag" ${ct === "flag" ? "selected" : ""}>标志位为真</option>
+          </select>
+          ${ct === "item" ? `<input type="text" data-condval="${i}" value="${mechEsc(c.hasItem)}" placeholder="道具id" style="width:98px;">` : ""}
+          ${ct === "clues" ? `<input type="number" data-condval="${i}" value="${c.minClues || 1}" min="1" style="width:54px;">` : ""}
+          ${ct === "flag" ? `<input type="text" data-condval="${i}" value="${mechEsc((c.flags || [])[0])}" placeholder="标志名" style="width:98px;">` : ""}
+        </div>
+        <div style="font-size:11px;color:#ffb060;font-weight:700;margin-bottom:6px;">就（按顺序执行）</div>
+        <div>${acts || '<div style="font-size:10px;color:#6a7585;padding:4px 0;">还没有动作</div>'}</div>
+        <button data-addact="${i}" style="margin-top:6px;background:#ffffff10;color:#cfd6e0;border:1px dashed #ffffff30;border-radius:7px;padding:6px 11px;font-size:11px;cursor:pointer;font-family:inherit;">＋ 加一个动作</button>
+      </div>`;
+    }
+    function nextMechId() {
+      let n = 1; const D = ED.mechDraft || [];
+      while (D.some(t => t.id === "mech_" + n)) n++;
+      return "mech_" + n;
+    }
+    function renderMech() {
+      const p = $("#edMechanics"), D = ED.mechDraft, clues = ED.ch.clues || [];
+      p.innerHTML = `<div style="width:min(780px,94vw);max-height:90vh;overflow:auto;background:#0b1119;border:1px solid #6fd3c433;border-radius:14px;padding:18px 22px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <h3 style="margin:0;color:#e8edf4;font-size:15px;">⚡ 游戏机制 · ${ED.ch.name} <small style="color:#6a7585;font-weight:400;">${D.length} 条</small></h3>
+          <div style="display:flex;gap:8px;"><button id="mechSave" class="pp-regen" style="margin:0;">💾 保存机制</button><button class="pp-close" id="mechClose">×</button></div>
+        </div>
+        <div style="font-size:11px;color:#8893a0;margin-bottom:14px;line-height:1.6;">配置「<b style="color:#6fd3c4;">当…发生 → 如果… → 就…</b>」。不碰代码,点 💾 保存后试玩即生效。</div>
+        <div id="mechList">${D.map((t, i) => mechCard(t, i, clues)).join("") || '<div style="color:#8893a0;font-size:12px;padding:24px;text-align:center;line-height:1.7;">还没有机制。点下面新建第一条——<br>比如「走进雾墙区域 → 播一段旁白 → 记一条线索」。</div>'}</div>
+        <button id="mechAdd" style="width:100%;margin-top:12px;background:#6fd3c414;color:#6fd3c4;border:1px dashed #6fd3c455;border-radius:9px;padding:11px;font-size:12px;cursor:pointer;font-family:inherit;">＋ 新建一条机制</button>
+      </div>`;
+      const close = () => { p.classList.add("hide"); p.innerHTML = ""; };
+      $("#mechClose").onclick = close;
+      $("#mechSave").onclick = saveMechanics;
+      $("#mechAdd").onclick = () => { D.push({ id: nextMechId(), type: "enter", at: [ED.spawn[0], ED.spawn[1]], area: [2, 2], once: true, conditions: {}, actions: [{ type: "text", speaker: "", content: "" }] }); renderMech(); };
+      bindMechEvents();
+    }
+    function bindMechEvents() {
+      const p = $("#edMechanics"), D = ED.mechDraft;
+      p.querySelectorAll("[data-trigtype]").forEach(el => el.onchange = () => { const i = +el.dataset.trigtype; D[i].type = el.value; if ((el.value === "enter" || el.value === "leave") && !D[i].area) D[i].area = [2, 2]; renderMech(); });
+      p.querySelectorAll("[data-at]").forEach(el => el.onchange = () => { D[+el.dataset.at].at = el.value.split(",").map(n => parseInt(n.trim()) || 0).slice(0, 2); });
+      p.querySelectorAll("[data-area]").forEach(el => el.onchange = () => { D[+el.dataset.area].area = el.value.split(",").map(n => parseInt(n.trim()) || 1).slice(0, 2); });
+      p.querySelectorAll("[data-once]").forEach(el => el.onchange = () => { D[+el.dataset.once].once = el.checked; });
+      p.querySelectorAll("[data-condtype]").forEach(el => el.onchange = () => { const i = +el.dataset.condtype, v = el.value; D[i].conditions = v === "none" ? {} : v === "item" ? { hasItem: "" } : v === "clues" ? { minClues: 1 } : { flags: [""] }; renderMech(); });
+      p.querySelectorAll("[data-condval]").forEach(el => el.onchange = () => { const c = D[+el.dataset.condval].conditions; if ("hasItem" in c) c.hasItem = el.value.trim(); else if ("minClues" in c) c.minClues = parseInt(el.value) || 1; else if ("flags" in c) c.flags = [el.value.trim()]; });
+      p.querySelectorAll("[data-delmech]").forEach(el => el.onclick = () => { D.splice(+el.dataset.delmech, 1); renderMech(); });
+      p.querySelectorAll("[data-addact]").forEach(el => el.onclick = () => { D[+el.dataset.addact].actions.push({ type: "text", speaker: "", content: "" }); renderMech(); });
+      p.querySelectorAll("[data-acttype]").forEach(el => el.onchange = () => { const mi = +el.dataset.mi, ai = +el.dataset.ai, tp = el.value; const b = { type: tp }; if (tp === "fx") b.effect = "scanline_tear"; if (tp === "set") b.value = true; D[mi].actions[ai] = b; renderMech(); });
+      p.querySelectorAll("[data-actf]").forEach(el => el.onchange = () => { const mi = +el.dataset.mi, ai = +el.dataset.ai, f = el.dataset.actf; let v = el.value; if (f === "value") v = (v === "true"); D[mi].actions[ai][f] = v; });
+      p.querySelectorAll("[data-delact]").forEach(el => el.onclick = () => { D[+el.dataset.mi].actions.splice(+el.dataset.ai, 1); renderMech(); });
+    }
+    async function saveMechanics() {
+      const trs = ED.mechDraft;
+      try {
+        const res = await fetch("/api/save-chapter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ chapterId: ED.ch.id, patch: { triggers: trs } }) });
+        const data = await res.json();
+        if (data.ok) { ED.ch.triggers = JSON.parse(JSON.stringify(trs)); $("#edMechanics").classList.add("hide"); $("#edMechanics").innerHTML = ""; showEdToast(`⚡ 已保存 ${trs.length} 条机制，试玩即生效`); }
+        else showEdToast("保存失败:" + (data.error || res.status), true);
+      } catch (e) { showEdToast("保存失败:server 未响应?", true); }
     }
 
     function renderEditorGrid() {

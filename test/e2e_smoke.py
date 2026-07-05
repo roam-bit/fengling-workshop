@@ -727,6 +727,35 @@ def console_pos_on_disk():
     return next(p["pos"] for p in ch4["props"] if p["id"] == "console_center")
 
 
+def g_mechanics():
+    # 机制卡编辑器:新建机制→保存→落盘 triggers(非破坏,备份还原)
+    path = ROOT / "chapters.json"
+    backup = path.read_text(encoding="utf-8")
+    try:
+        m = None
+        for _ in range(2):
+            dom = dump_dom(f"{BASE}/index.html?edit=area_edge&simmech=1&_={ns()}", 13000)
+            mm = re.search(r"SIMMECH (?!\$\{)[^<]*", dom)
+            if mm and "PASS" in mm.group(0):
+                m = mm.group(0); break
+            if mm:
+                m = mm.group(0)
+        rec("MECH", "机制卡编辑器:新建机制→保存→落盘 triggers", bool(m and "PASS" in m), m or "探针未触发")
+    finally:
+        path.write_text(backup, encoding="utf-8")
+        rec("MECH", "chapters.json 测试后已还原", path.read_text(encoding="utf-8") == backup)
+    # server triggers 字段保存(直接 API,非破坏)
+    backup2 = path.read_text(encoding="utf-8")
+    try:
+        r = _post_json(f"{BASE}/api/save-chapter", {"chapterId": "ch4", "patch": {"triggers": [{"id": "t_e2e", "type": "auto", "at": [4, 7], "once": True, "actions": [{"type": "text", "content": "x"}]}]}})
+        disk = json.loads(path.read_text(encoding="utf-8"))
+        ch4 = next(c for c in disk["chapters"] if c["id"] == "ch4")
+        ok = r.get("ok") and "triggers" in (r.get("applied") or []) and any(t.get("id") == "t_e2e" for t in ch4.get("triggers", []))
+        rec("MECH", "server triggers 字段保存生效", ok, f"applied={r.get('applied')}")
+    finally:
+        path.write_text(backup2, encoding="utf-8")
+
+
 def g_save():
     path = ROOT / "chapters.json"
     backup = path.read_text(encoding="utf-8")
@@ -781,6 +810,7 @@ def main():
     g_aicmd()
     g_semantic(d)
     g_publish()
+    g_mechanics()
     g_save()
 
     # 报告
@@ -789,7 +819,7 @@ def main():
         groups.setdefault(g, []).append((n, ok, detail))
     fails = 0
     warns = 0
-    for g in ["FILE", "PIXEL", "LOAD", "DRAG", "INTERACT", "AREA", "WORLDMAP", "EVENT", "GAMEPLAY", "AICMD", "SEMANTIC", "PUBLISH", "SAVE"]:
+    for g in ["FILE", "PIXEL", "LOAD", "DRAG", "INTERACT", "AREA", "WORLDMAP", "EVENT", "GAMEPLAY", "AICMD", "SEMANTIC", "PUBLISH", "MECH", "SAVE"]:
         if g not in groups:
             continue
         print(f"\n[{g}]")

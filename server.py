@@ -148,7 +148,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return self._json(400, {'ok': False, 'error': 'missing chapterId'})
         # 空 patch 早退,不动文件(避免误触发重格式化)
         if not isinstance(event_patch, dict) and not isinstance(create, dict) and not isinstance(settings_body, dict) \
-                and (not patch or not any(k in patch for k in ('walkable', 'spawn', 'actorSize', 'npcs', 'props', 'gates'))):
+                and (not patch or not any(k in patch for k in ('walkable', 'spawn', 'actorSize', 'npcs', 'props', 'gates', 'triggers', 'clues'))):
             return self._json(200, {'ok': True, 'chapterId': ch_id, 'applied': [], 'noop': True})
 
         chapters_path = ROOT / 'chapters.json'
@@ -290,6 +290,14 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             existing_g = {g.get('to'): dict(g) for g in target.get('gates', [])}
             target['gates'] = [{**existing_g.get(g.get('to'), {}), **g} for g in patch['gates']]
             applied.append('gates')
+        # 机制卡(triggers)整替换:章节级机制,机制卡编辑器整体管理
+        if 'triggers' in patch and isinstance(patch['triggers'], list):
+            target['triggers'] = patch['triggers']
+            applied.append('triggers')
+        # 线索库(clues)整替换:章节级线索资源
+        if 'clues' in patch and isinstance(patch['clues'], list):
+            target['clues'] = patch['clues']
+            applied.append('clues')
 
         try:
             # 紧凑写回(无 indent),保持文件小、便于 git diff
