@@ -9,14 +9,78 @@
 """
 import http.server
 import socketserver
+import fcntl
+import functools
 import json
 import os
+import shutil
 import sys
+import threading
 import time
+from collections import defaultdict, deque
 from pathlib import Path
 
 PORT = int(os.environ.get('PORT', 8131))
 ROOT = Path(__file__).resolve().parent
+BACKUP_DIR = ROOT / 'backups'
+BACKUP_KEEP = 20
+AI_RATE_LIMIT = 8
+AI_RATE_WINDOW = 60
+_CHAPTERS_THREAD_LOCK = threading.RLock()
+_AI_RATE_LOCK = threading.Lock()
+_AI_REQUESTS = defaultdict(deque)
+
+
+def chapters_write_lock(fn):
+    """Serialize every chapters.json read-modify-write across threads and processes."""
+    @functools.wraps(fn)
+    def wrapped(*args, **kwargs):
+        with _CHAPTERS_THREAD_LOCK:
+            lock_path = ROOT / '.chapters.lock'
+            with lock_path.open('a+', encoding='utf-8') as lock_file:
+                fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+                try:
+                    return fn(*args, **kwargs)
+                finally:
+                    fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+    return wrapped
+
+
+def create_rolling_backup(path):
+    """Keep the last 20 valid pre-write snapshots instead of one fragile .bak."""
+    if not path.exists():
+        return
+    BACKUP_DIR.mkdir(exist_ok=True)
+    stamp = time.strftime('%Y%m%d-%H%M%S') + f'-{time.time_ns() % 1_000_000_000:09d}'
+    shutil.copyfile(path, BACKUP_DIR / f'chapters-{stamp}.json')
+    backups = sorted(BACKUP_DIR.glob('chapters-*.json'), key=lambda p: p.stat().st_mtime_ns, reverse=True)
+    for old in backups[BACKUP_KEEP:]:
+        old.unlink(missing_ok=True)
+
+
+def write_json_atomic(path, data):
+    """Write-and-replace prevents a crash from leaving a half-written JSON file."""
+    tmp = path.with_name(f'.{path.name}.{os.getpid()}.{threading.get_ident()}.tmp')
+    try:
+        with tmp.open('w', encoding='utf-8') as f:
+            f.write(json.dumps(data, ensure_ascii=False, separators=(',', ': ')) + '\n')
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
+def ai_request_allowed(client_ip):
+    now = time.monotonic()
+    with _AI_RATE_LOCK:
+        q = _AI_REQUESTS[client_ip]
+        while q and now - q[0] >= AI_RATE_WINDOW:
+            q.popleft()
+        if len(q) >= AI_RATE_LIMIT:
+            return False, max(1, int(AI_RATE_WINDOW - (now - q[0])))
+        q.append(now)
+        return True, 0
 
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -51,6 +115,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         ch_id = body.get('chapterId')
         if not text or not ch_id:
             return self._json(400, {'ok': False, 'error': 'missing text/chapterId'})
+        allowed, retry_after = ai_request_allowed(self.client_address[0])
+        if not allowed:
+            return self._json(429, {'ok': False, 'error': f'AI 命令过于频繁，请 {retry_after} 秒后再试', 'retryAfter': retry_after})
         data = load_chapters()
         ch = next((c for c in data.get('chapters', []) if c.get('id') == ch_id), None)
         if not ch:
@@ -64,6 +131,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         result['intent'] = {k: v for k, v in intent.items() if k != 'chapterId'}
         return self._json(200 if result.get('ok') else 422, result)
 
+    @chapters_write_lock
     def _save_chapter(self):
         try:
             length = int(self.headers.get('Content-Length', 0))
@@ -87,10 +155,9 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if not chapters_path.exists():
             return self._json(500, {'ok': False, 'error': 'chapters.json missing'})
 
-        # 备份(覆盖前留一份,防误操作)
+        # 写前滚动备份(保留最近 20 份，连续误保存也能回退)
         try:
-            backup = ROOT / 'chapters.json.bak'
-            backup.write_bytes(chapters_path.read_bytes())
+            create_rolling_backup(chapters_path)
         except Exception:
             pass  # 备份失败不阻塞保存
 
@@ -110,10 +177,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self._json(400, {'ok': False, 'error': 'createChapter: room.walkable 缺失'})
             data['chapters'].append(create)
             try:
-                chapters_path.write_text(
-                    json.dumps(data, ensure_ascii=False, separators=(',', ': ')) + '\n',
-                    encoding='utf-8'
-                )
+                write_json_atomic(chapters_path, data)
             except Exception as e:
                 return self._json(500, {'ok': False, 'error': f'write failed: {e}'})
             return self._json(200, {'ok': True, 'applied': ['createChapter'], 'chapterId': cid, 'savedAt': int(time.time() * 1000)})
@@ -138,10 +202,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             else:
                 data.pop('settings', None)
             try:
-                chapters_path.write_text(
-                    json.dumps(data, ensure_ascii=False, separators=(',', ': ')) + '\n',
-                    encoding='utf-8'
-                )
+                write_json_atomic(chapters_path, data)
             except Exception as e:
                 return self._json(500, {'ok': False, 'error': f'write failed: {e}'})
             return self._json(200, {'ok': True, 'applied': ['settings'], 'savedAt': int(time.time() * 1000)})
@@ -153,10 +214,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return self._json(400, {'ok': False, 'error': 'eventDemo.events.nodes 缺失或为空'})
             data['eventDemo'] = event_patch
             try:
-                chapters_path.write_text(
-                    json.dumps(data, ensure_ascii=False, separators=(',', ': ')) + '\n',
-                    encoding='utf-8'
-                )
+                write_json_atomic(chapters_path, data)
             except Exception as e:
                 return self._json(500, {'ok': False, 'error': f'write failed: {e}'})
             return self._json(200, {'ok': True, 'applied': ['eventDemo'], 'savedAt': int(time.time() * 1000)})
@@ -193,6 +251,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                         existing[nid]['pos'] = p_npc['pos']
                     if 'dialogue' in p_npc:
                         existing[nid]['dialogue'] = p_npc['dialogue']
+                    if 'dialogPages' in p_npc:
+                        existing[nid]['dialogPages'] = p_npc['dialogPages']
                     for k in ('dockSize', 'noSprite', 'silent'):
                         if k in p_npc:
                             existing[nid][k] = p_npc[k]
@@ -233,10 +293,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
 
         try:
             # 紧凑写回(无 indent),保持文件小、便于 git diff
-            chapters_path.write_text(
-                json.dumps(data, ensure_ascii=False, separators=(',', ': ')) + '\n',
-                encoding='utf-8'
-            )
+            write_json_atomic(chapters_path, data)
         except Exception as e:
             return self._json(500, {'ok': False, 'error': f'write failed: {e}'})
 
@@ -248,18 +305,27 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         })
 
     def do_OPTIONS(self):
+        origin = self.headers.get('Origin')
+        if origin and not self._same_origin(origin):
+            return self._json(403, {'ok': False, 'error': 'cross-origin request denied'})
         self.send_response(204)
-        self.send_header('Access-Control-Allow-Origin', '*')
         self.send_header('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
         self.send_header('Access-Control-Allow-Headers', 'Content-Type')
         self.end_headers()
+
+    def _same_origin(self, origin):
+        host = self.headers.get('Host', '')
+        return bool(host) and origin.rstrip('/') in (f'http://{host}', f'https://{host}')
 
     def end_headers(self):
         # 开发期一律 no-cache(治"浏览器强缓存"老毛病)
         self.send_header('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
         self.send_header('Pragma', 'no-cache')
         self.send_header('Expires', '0')
-        self.send_header('Access-Control-Allow-Origin', '*')
+        origin = self.headers.get('Origin')
+        if origin and self._same_origin(origin):
+            self.send_header('Access-Control-Allow-Origin', origin)
+            self.send_header('Vary', 'Origin')
         super().end_headers()
 
     def _json(self, code, payload):
@@ -284,10 +350,10 @@ def load_chapters():
 def write_chapters(data):
     path = ROOT / 'chapters.json'
     try:
-        (ROOT / 'chapters.json.bak').write_bytes(path.read_bytes())
+        create_rolling_backup(path)
     except Exception:
         pass
-    path.write_text(json.dumps(data, ensure_ascii=False, separators=(',', ': ')) + '\n', encoding='utf-8')
+    write_json_atomic(path, data)
 
 
 def _grid_of(room):
@@ -696,6 +762,7 @@ def cmd_compile_walkable(data, ch, params):
     return {'ok': True, 'action': 'compile', 'changedCells': changed}
 
 
+@chapters_write_lock
 def execute_command(body):
     intent = body.get('intent')
     ch_id = body.get('chapterId')
@@ -824,8 +891,8 @@ if __name__ == '__main__':
     socketserver.ThreadingTCPServer.allow_reuse_address = True
     socketserver.ThreadingTCPServer.daemon_threads = True
     # ⚠️ 必须 Threading 版:单线程 TCPServer 会被一个挂起的连接堵死整个服务("网页又进不去"的根因)
-    with socketserver.ThreadingTCPServer(('', PORT), Handler) as httpd:
-        print(f'凤翎工坊 · 本地 server 启动 → http://localhost:{PORT}')
+    with socketserver.ThreadingTCPServer(('127.0.0.1', PORT), Handler) as httpd:
+        print(f'凤翎工坊 · 本地 server 启动 → http://127.0.0.1:{PORT}')
         print(f'  GET  /<file>                  - 静态文件')
         print(f'  POST /api/save-chapter        - 保存章节(编辑器调用)')
         try:

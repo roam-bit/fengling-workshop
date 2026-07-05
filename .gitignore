@@ -23,6 +23,8 @@ _archive/
 tmp/
 *.bak
 chapters.json.bak
+backups/
+.chapters.lock
 
 # --- 误放的素材 / 截图工作区 ---
 微信图片_*.png

@@ -4,6 +4,8 @@
 
 ![游戏画面](docs/readme-assets/game.png)
 
+**[在线试玩《07 号调查员》](https://roam-bit.github.io/fengling-workshop/index.html?play=project)** · 手机可直接打开，建议横屏。
+
 ## ✨ 这是什么
 
 两层东西，住在同一个仓库里：
@@ -21,7 +23,7 @@ cd fengling-workshop
 python3 server.py            # 启动本地 server（端口 8131，仅用 Python 标准库）
 ```
 
-然后浏览器打开 **http://localhost:8131**。
+然后浏览器打开 **http://127.0.0.1:8131**。
 
 > macOS 用户也可以直接双击 `启动凤翎工坊.command`。
 
@@ -35,7 +37,7 @@ python3 server.py            # 启动本地 server（端口 8131，仅用 Python
 ![世界地图](docs/readme-assets/worldmap.png)
 
 - **澜洲大陆世界图**：纯 DOM 高清 HUD ＋ 塞尔达式战雾，小说写到哪、地图亮到哪
-- **Phaser 像素房间**：网格移动 ＋ 撞墙碰撞 ＋ 走近 NPC 对话 ＋ 镜头跟随 ＋ y-sort 遮挡
+- **Phaser 像素房间**：键盘移动或点击 BFS 自动寻路 ＋ 撞墙碰撞 ＋ 走近 NPC 对话 ＋ 镜头跟随 ＋ y-sort 遮挡
 - **NPC 系统**：行为枚举（静止 / 游走 / 巡逻）＋ 条件对话页（"它记得你来过"）
 - **触发器 ＋ 指令解释器**：4 种触发器（走近 / 进入 / 离开 / 自动）× 8 种指令积木（旁白 / 分支 / 设标志 / 给道具 / 记线索 / 传送 / 特效 / 等待）
 - **玩法机制**：调查日志（线索渐进解锁）＋ 叙事道具（找钥匙开门闭环）
@@ -77,7 +79,7 @@ cp .ai_key.example .ai_key
 ## 🧪 测试
 
 ```bash
-python3 test/e2e_smoke.py     # 180 项端到端确定性检查（需先起 server）
+python3 test/e2e_smoke.py     # 197 项端到端确定性检查（需先起 server）
 ```
 
 用 headless Chrome ＋ Python 对真实 server 做确定性验证，覆盖：数据完整性 / 碰撞连通（BFS）/ 拖拽存盘往返 / AI 命令落盘 / 语义编译 / 发布门 / 读者模式等全链路。
@@ -91,7 +93,7 @@ chapters.json       游戏数据（单一数据源）
 phaser.min.js       Phaser 引擎（本地化，离线可跑）
 art/                美术管线（处理脚本 ＋ out/ 量化素材 ＋ 生图指南）
 docs/               技术文档（三系统设计 / 美术生图规格卡）
-test/e2e_smoke.py   E2E 冒烟测试（180 项）
+test/e2e_smoke.py   E2E 冒烟测试（197 项）
 启动凤翎工坊.command   macOS 一键启动器
 ```
 

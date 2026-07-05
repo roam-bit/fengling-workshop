@@ -109,6 +109,12 @@ def g_file():
         cc = next((c for c in d["chapters"] if c["id"] == cid), {})
         ip = [p for p in cc.get("props", []) if p.get("isInteractable") and (p.get("interactText") or "").strip()]
         rec("FILE", f"{cid} 线框物件 ≥3(空盒子修复)", len(ip) >= 3, f"{len(ip)} 个")
+        has_clue_action = any(a.get("type") == "addClue" for p in cc.get("props", []) for a in (p.get("actions") or []))
+        has_revisit = any(n.get("dialogPages") for n in cc.get("npcs", []))
+        rec("FILE", f"{cid} 内容密度:线索+触发器+回访对话", bool(cc.get("clues") and cc.get("triggers") and has_clue_action and has_revisit))
+    ch3 = next((c for c in d["chapters"] if c["id"] == "ch3"), {})
+    finale = next((t for t in ch3.get("triggers", []) if t.get("id") == "tr_ch3_tonight_finale"), None)
+    rec("FILE", "今夜终局:minClues 条件+完结动作", bool(finale and finale.get("conditions", {}).get("minClues") and len(finale.get("actions", [])) >= 4))
     # 第二种创作模式:eventDemo 事件树完整
     nodes = d.get("eventDemo", {}).get("events", {}).get("nodes", [])
     rec("FILE", "第二模式 eventDemo 事件树完整", len(nodes) >= 3, f"{len(nodes)} 节点")
@@ -399,14 +405,14 @@ def g_gameplay(d):
             ok = bool(t.get("id") and t.get("at") and t.get("type") in ("enter", "leave", "auto") and isinstance(t.get("actions"), list) and t["actions"])
             rec("GAMEPLAY", f"{c['id']} 触发器 {t.get('id','?')} schema 完整", ok)
     rec("GAMEPLAY", "演示触发器存在(ch4 auto + edge enter)", trig_n >= 2, f"{trig_n} 个")
-    # 数据层:dialogPages 末页必须无条件(保证总有兜底页)
+    # 数据层:条件页各自有节点；首次 dialogue 是统一兜底，不要求复制一份无条件末页
     for c in d.get("chapters", []):
         for n in c.get("npcs", []):
             pages = n.get("dialogPages")
             if pages:
-                last_ok = not pages[-1].get("conditions")
                 all_dlg = all(p.get("dialogue", {}).get("nodes") for p in pages)
-                rec("GAMEPLAY", f"{c['id']}/{n['id']} dialogPages 末页无条件+各页有节点", last_ok and all_dlg)
+                base_ok = bool(n.get("dialogue", {}).get("nodes"))
+                rec("GAMEPLAY", f"{c['id']}/{n['id']} dialogPages 各页有节点+首次对话兜底", base_ok and all_dlg)
     # 行为探针:patrol/wander NPC 在虚拟时间内真的移动了(重试抗 flaky)
     for label, room, npc in [("patrol(FS-7800)", "area_city", "patrol78"), ("wander(陈伯)", "area_city", "citizen_lin")]:
         pr = None
@@ -427,6 +433,14 @@ def g_gameplay(d):
                 tr = m.group(0); break
             if m: tr = m.group(0)
         rec("GAMEPLAY", f"触发器 {label} 真实链路触发", bool(tr and "PASS" in tr), tr or "探针未触发")
+    # 点击寻路:监测带出生点(3,17) → 相邻可走格(4,17)
+    tap = None
+    for _ in range(2):
+        dom = dump_dom(f"{BASE}/index.html?room=area_belt&tapto=4,17&_={ns()}", 9000)
+        m = re.search(r"TAPMOVE (?!\$\{)[^<]*", dom)
+        if m and "PASS" in m.group(0): tap = m.group(0); break
+        if m: tap = m.group(0)
+    rec("GAMEPLAY", "点击目标格→BFS 自动寻路到达", bool(tap and "PASS" in tap), tap or "探针未触发")
     # 条件对话页探针:SE-12 默认页 vs flag 后再访页
     pg1 = None
     for _ in range(2):
@@ -494,6 +508,18 @@ def g_gameplay(d):
         nn = next(n for c in disk["chapters"] if c["id"] == "area_city" for n in c["npcs"] if n["id"] == "citizen_lin")
         ok = out.get("ok") and nn.get("behavior") == "wander" and nn.get("range") == 4
         rec("GAMEPLAY", "NPC 行为 编辑器patch→server→落盘", ok, f"disk behavior={nn.get('behavior')} range={nn.get('range')}")
+        # 台词编辑器写入通道:dialogue + 条件回访页一并 merge，不丢其他 NPC 字段
+        original = next(n for c in disk["chapters"] if c["id"] == "ch1" for n in c["npcs"] if n["id"] == "qinwang")
+        dialogue = json.loads(json.dumps(original["dialogue"]))
+        dialogue["nodes"][0]["text"] = "【E2E】创作者改写的第一句台词"
+        pages = json.loads(json.dumps(original.get("dialogPages") or []))
+        req2 = urllib.request.Request(f"{BASE}/api/save-chapter",
+            data=json.dumps({"chapterId": "ch1", "patch": {"npcs": [{"id": "qinwang", "dialogue": dialogue, "dialogPages": pages}]}}).encode(),
+            headers={"Content-Type": "application/json"}, method="POST")
+        out2 = json.loads(urllib.request.urlopen(req2, timeout=10).read())
+        disk2 = json.loads(path.read_text(encoding="utf-8"))
+        qin = next(n for c in disk2["chapters"] if c["id"] == "ch1" for n in c["npcs"] if n["id"] == "qinwang")
+        rec("GAMEPLAY", "NPC 台词编辑 dialogue+dialogPages→server→落盘", bool(out2.get("ok") and qin["dialogue"]["nodes"][0]["text"].startswith("【E2E】") and qin.get("dialogPages") == pages))
     finally:
         path.write_text(backup, encoding="utf-8")
         rest = json.loads(path.read_text(encoding="utf-8"))
@@ -653,7 +679,7 @@ def g_publish():
         m = re.search(r"SIMPUBLISH mode=1[^<]*", dom)
         if m and "PASS" in m.group(0): pub = m.group(0); break
         if m: pub = m.group(0)
-    rec("PUBLISH", "发布门:完整场景通过校验+出分享链接", bool(pub and "PASS" in pub and "play=ch4" in pub), pub or "探针未触发")
+    rec("PUBLISH", "发布门:完整场景通过校验+出项目级分享链接", bool(pub and "PASS" in pub and "play=project" in pub), pub or "探针未触发")
     # 发布门:坏大门(出生点走不到)应被拦下,不出链接
     bad = None
     for _ in range(2):
@@ -670,6 +696,14 @@ def g_publish():
         if m and "PASS" in m.group(0): rd = m.group(0); break
         if m: rd = m.group(0)
     rec("PUBLISH", "只读分享链接:藏编辑器入口+只读角标", bool(rd and "PASS" in rd), rd or "探针未触发")
+    # 项目级分享链接:先落世界地图,不是把读者锁在单房间里
+    rp = None
+    for _ in range(2):
+        dom = dump_dom(f"{BASE}/index.html?play=project&readerprobe=1&_={ns()}", 9000)
+        m = re.search(r"READERPROJECT [^<]*", dom)
+        if m and "PASS" in m.group(0): rp = m.group(0); break
+        if m: rp = m.group(0)
+    rec("PUBLISH", "项目级分享链接:只读世界地图为入口", bool(rp and "PASS" in rp), rp or "探针未触发")
     # 订阅定价区:3 档(免费/Pro¥49/IP¥199)+ 价值主张文案 + 留邮箱
     dom = dump_dom(f"{BASE}/index.html?skip-hero=1&_={ns()}", 5000)
     body = dom.split("<script")[0]  # 排除 <script> 里 buildLanding 源码的模板字面量(同 simdrag 探针的坑)

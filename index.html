@@ -485,6 +485,18 @@
   #edInspector .pp-mock-tag { display: inline-block; font-size: 9px; padding: 2px 6px; background: #6fd3c422; color: #6fd3c4; border-radius: 3px; margin-left: 6px; font-family: "Courier New",monospace; }
   #edInspector .ins-field { display: flex; justify-content: space-between; gap: 10px; padding: 8px 0; border-bottom: 1px dashed #ffffff10; font-size: 12px; }
   #edInspector .ins-field span { color: #8893a0; flex-shrink: 0; } #edInspector .ins-field b { color: #eaeef5; font-weight: 600; text-align: right; }
+  #edInspector .npc-dialogue-head { display: flex; align-items: center; gap: 8px; margin-top: 14px; }
+  #edInspector .npc-dialogue-head .pp-label { margin: 0; flex: 1; }
+  #edInspector .npc-dialogue-head select { max-width: 130px; }
+  #edInspector .npc-dialogue-node { background: #ffffff06; border: 1px solid #ffffff12; border-radius: 9px; padding: 9px; margin-top: 8px; }
+  #edInspector .npc-dialogue-node:focus-within { border-color: #6fd3c466; background: #6fd3c40a; }
+  #edInspector .npc-dialogue-meta { display: flex; align-items: center; gap: 7px; margin-bottom: 6px; font: 9px "Courier New", monospace; color: #8893a0; }
+  #edInspector .npc-dialogue-meta b { color: #6fd3c4; }
+  #edInspector .npc-dialogue-node input { margin-bottom: 6px; }
+  #edInspector .npc-dialogue-node textarea { min-height: 66px; line-height: 1.55; }
+  #edInspector .npc-dialogue-route { margin-top: 5px; font: 9px "Courier New", monospace; color: #6a7585; line-height: 1.45; }
+  #edInspector .npc-dialogue-add { width: 100%; margin-top: 9px; background: #6fd3c414; color: #6fd3c4; border: 1px dashed #6fd3c455; border-radius: 8px; padding: 8px; font-size: 11px; cursor: pointer; font-family: inherit; }
+  #edInspector .npc-dialogue-add:hover { background: #6fd3c422; }
 
   /* NPC / spawn 浮层(可拖拽) */
   .ed-pawn { position: absolute; cursor: grab; transform: translate(-50%, -50%); display: flex; flex-direction: column; align-items: center;
@@ -672,6 +684,28 @@
   #evEdIns .eve-choice .eve-meta { font-size: 9px; color: #8893a0; font-family: "Courier New",monospace; margin-top: 6px; }
   #evEdIns .eve-del { background: #ff7a7a18; color: #ff9d9d; border: 1px solid #ff7a7a44; border-radius: 8px; padding: 8px 14px; font-size: 12px; cursor: pointer; font-family: inherit; margin-top: 18px; }
   #evEdIns .eve-hint { font-size: 10px; color: #8893a0; line-height: 1.6; margin-top: 14px; }
+
+  /* 手机读者模式：横竖屏都可点击寻路，DOM 操作区保持可触达 */
+  #game-root canvas { touch-action: none; }
+  @media (max-width: 700px), (pointer: coarse) {
+    #backbar { padding: 8px 10px; gap: 8px; background: linear-gradient(#06080cf2 45%, transparent); }
+    #backbar button { padding: 7px 10px; font-size: 11px; }
+    #backbar .bbTitle { font-size: 11px; max-width: 48vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    #readerBadge { font-size: 9px; margin-left: auto; }
+    #roomhud { bottom: 8px; max-width: calc(100vw - 20px); width: max-content; padding: 7px 12px; font-size: 11px; text-align: center; }
+    #interact { bottom: 48px; font-size: 12px; padding: 8px 15px; cursor: pointer; user-select: none; }
+    #dialog { bottom: 7px; width: calc(100vw - 14px); max-width: none; max-height: 55vh; overflow-y: auto; padding: 13px 14px 11px; border-radius: 11px; }
+    #dialog .dlg-text { font-size: 14px; line-height: 1.65; min-height: 36px; }
+    #dialog .dlg-choices button { padding: 10px 11px; min-height: 42px; }
+    #topbar { left: 0; right: 0; padding: 8px 10px; gap: 7px; justify-content: flex-end; flex-wrap: wrap; }
+    #countdown { font-size: 10px; padding: 5px 8px; }
+    #recordsBtn, #lpHomeBtn, #editorBtn { padding: 6px 9px; font-size: 10px; }
+    .wm2-stage { width: 100vw; max-height: 82vh; }
+    .wm2-badge { width: 44px; height: 44px; }
+    .wm2-loc { width: 104px; }
+    #detail { width: 100%; max-width: 100vw; top: 38%; border-left: 0; border-top: 1px solid #6fd3c433; }
+    #worldmap.panel-open .wm2-stage { transform: translateY(-18vh) scale(.88); }
+  }
 </style>
 </head>
 <body>
@@ -755,7 +789,7 @@
   <!-- 区域内操作提示 -->
   <div id="roomhud" class="hide">用 <b>方向键 / WASD</b> 走动 · 撞墙会停下</div>
   <!-- 走近 NPC 的交互提示 -->
-  <div id="interact" class="hide">按 <b>空格</b> <span id="interactVerb">与</span> <span id="interactName"></span><span id="interactVerb2"> 对话</span></div>
+  <div id="interact" class="hide"><span id="interactAction">按 <b>空格</b></span> <span id="interactVerb">与</span> <span id="interactName"></span><span id="interactVerb2"> 对话</span></div>
   <!-- 对话框 -->
   <div id="dialog" class="hide">
     <div class="dlg-speaker" id="dlgSpeaker"></div>
@@ -785,6 +819,7 @@
   <script>
   (function () {
     const $ = s => document.querySelector(s);
+    const escapeHTML = value => String(value == null ? "" : value).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch]));
     if (typeof Phaser === "undefined") { showErr("Phaser 引擎未能加载（网络问题）。"); return; }
 
     let DATA = null, GAME = null;
@@ -968,6 +1003,11 @@
       $("#detail").classList.add("hide");
       $("#backbar").classList.remove("hide");
       $("#roomhud").classList.remove("hide");
+      const touchMode = matchMedia("(pointer: coarse)").matches || innerWidth <= 700;
+      $("#roomhud").innerHTML = touchMode
+        ? "轻点地面自动行走 · 点角色/物件可交互 · <b>横屏体验更佳</b>"
+        : "用 <b>方向键 / WASD</b> 走动 · 也可点击地面自动寻路";
+      $("#interactAction").innerHTML = touchMode ? "<b>轻点此处</b>" : "按 <b>空格</b>";
       const needsPropArt = !ch.room.bgImage && (ch.props || []).some(p => !p.sprite);
       $("#bbTitle").innerHTML = `${ch.title} · ${ch.name}　<b>${ch.place}</b>` +
         (needsPropArt ? `　<span style="font-size:10px;color:#8893a0;border:1px dashed #8893a055;border-radius:4px;padding:2px 7px;font-family:'Courier New',monospace;" title="创作者可随时用 AI 为该场景生成物件贴图">线框模式 · 待贴美术</span>` : "");
@@ -1144,7 +1184,10 @@
       (room.innerWalls || []).forEach(([wx, wy]) => { if (grid[wy] && grid[wy][wx] !== undefined) grid[wy][wx] = 1; });
       // 初始化 NPC 和 spawn(从 chapters.json 深拷贝可拖位置)
       const npcs = (ch.npcs || []).map(n => ({ id: n.id, name: n.name, pos: [...n.pos], img: NPC_TEX[n.id] || "qinwang_front", noSprite: !!n.noSprite,
-        behavior: n.behavior || "static", range: n.range || 3, waypoints: (n.waypoints || []).map(w => [...w]) })); // M5 行为字段进编辑器
+        silent: !!n.silent, dockSize: n.dockSize || 0,
+        dialogue: JSON.parse(JSON.stringify(n.dialogue || { start: 0, nodes: [] })),
+        dialogPages: n.dialogPages ? JSON.parse(JSON.stringify(n.dialogPages)) : null,
+        behavior: n.behavior || "static", range: n.range || 3, waypoints: (n.waypoints || []).map(w => [...w]) })); // M5 行为 + 对话字段进编辑器
       const spawn = [...room.spawn];
       // 初始化 props(底图里的装饰品,可拖、可勾障碍、可标可交互)
       const props = (ch.props || []).map(p => ({
@@ -1221,7 +1264,7 @@
         const res = validateForPublish(testCh);
         const errs = res.issues.filter(i => i.level === "error").length;
         const want = (simpub === "brokengate") ? !res.ok : res.ok; // brokengate 期望失败,其余期望通过
-        const out = `SIMPUBLISH mode=${simpub} ok=${res.ok} checks=${res.checks} errs=${errs} link=${res.ok ? shareLink(ED.ch.id).slice(-20) : "none"} ${want ? "PASS" : "FAIL"}`;
+        const out = `SIMPUBLISH mode=${simpub} ok=${res.ok} checks=${res.checks} errs=${errs} link=${res.ok ? shareLink().slice(-24) : "none"} ${want ? "PASS" : "FAIL"}`;
         document.title = out;
         const d = document.createElement("div"); d.id = "simPubOut"; d.textContent = out;
         d.style.cssText = "position:fixed;top:0;left:0;z-index:99999;background:#000;color:#0f0;font:14px monospace;padding:8px"; document.body.appendChild(d);
@@ -1632,10 +1675,26 @@
     }
 
     function renderNpcInspector(panel, n) {
-      const full = (ED.ch.npcs || []).find(x => x.id === n.id) || {};
-      const dlg = (full.dialogue && full.dialogue.nodes) || [];
-      const firstLine = (dlg[0] && dlg[0].text) || "(对话见 chapters.json)";
       const bh = n.behavior || "static";
+      const sources = [{ key: "base", label: "首次对话", dialogue: n.dialogue }]
+        .concat((n.dialogPages || []).map((p, i) => ({ key: "page-" + i, label: `条件页 ${i + 1}`, dialogue: p.dialogue, conditions: p.conditions || {} })));
+      const activeKey = n._dialogueView || "base";
+      const active = sources.find(s => s.key === activeKey) || sources[0];
+      const dlg = (active.dialogue && active.dialogue.nodes) || [];
+      const condLabel = active.conditions
+        ? Object.entries(active.conditions).map(([k, v]) => `${k}:${Array.isArray(v) ? v.join("+") : v}`).join(" · ") || "默认条件"
+        : "玩家第一次交谈时使用";
+      const nodeCards = dlg.map((node, i) => {
+        const route = node.choices && node.choices.length
+          ? `分支：${node.choices.map(c => `${c.label} → ${c.goto}`).join(" / ")}`
+          : `下一步：${node.goto == null ? "end" : node.goto}`;
+        return `<div class="npc-dialogue-node" data-node="${i}">
+          <div class="npc-dialogue-meta"><b>NODE ${String(i + 1).padStart(2, "0")}</b><span>${node.choices && node.choices.length ? "分歧节点" : "台词节点"}</span></div>
+          <input type="text" class="npc-speaker" value="${escapeHTML(node.speaker || n.name)}" aria-label="第 ${i + 1} 句说话人">
+          <textarea class="npc-line" rows="3" aria-label="第 ${i + 1} 句台词">${escapeHTML(node.text || "")}</textarea>
+          <div class="npc-dialogue-route">${escapeHTML(route)}${node.do && node.do.length ? ` · ${node.do.length} 条剧情指令（保留）` : ""}</div>
+        </div>`;
+      }).join("");
       panel.innerHTML = `
         <div class="pp-head">
           <h3>${n.noSprite ? "◎" : "🎭"} ${n.name}</h3>
@@ -1644,7 +1703,7 @@
         <div class="pp-sub">${n.noSprite ? "底图已画的交互点(脉动高亮环)" : "场景 NPC"} · 想挪位置在画板上拖它</div>
         <div class="ins-field"><span>ID</span><b>${n.id}</b></div>
         <div class="ins-field"><span>位置</span><b style="color:#6fd3c4;font-family:'Courier New',monospace">${n.pos[0]},${n.pos[1]}</b></div>
-        <div class="ins-field"><span>对话结束记线索</span><b>${full.silent ? "否(沉默)" : "是"}</b></div>
+        <div class="ins-field"><span>对话结束记线索</span><b>${n.silent ? "否(沉默)" : "是"}</b></div>
         ${n.noSprite ? "" : `
         <label class="pp-label">行为 <small style="color:#6a7585;font-weight:400">这个角色平时在做什么</small></label>
         <select id="npcBehavior" style="width:100%">
@@ -1654,9 +1713,14 @@
         </select>
         ${bh === "wander" ? `<label class="pp-label">活动半径(格) <small style="color:#6a7585;font-weight:400">离出生点最多走多远</small></label><input type="number" id="npcRange" value="${n.range || 3}" min="1" max="12" style="width:70px">` : ""}
         ${bh === "patrol" ? `<label class="pp-label">巡逻路径点 <small style="color:#6a7585;font-weight:400">格坐标,分号隔开,如 5,5; 12,5; 12,12</small></label><input type="text" id="npcWaypoints" value="${(n.waypoints || []).map(w => w.join(",")).join("; ")}" placeholder="5,5; 12,5; 12,12"><div id="npcWpHint" style="font-size:10px;color:#8893a0;margin-top:4px;line-height:1.5;">角色会按顺序走向每个点,到最后一个再回第一个。先在画板上看好坐标(左下角标)。</div>` : ""}`}
-        <label class="pp-label">开场台词</label>
-        <div style="font-size:12px;color:#cfd6e0;line-height:1.6;background:#ffffff06;border:1px solid #ffffff12;border-radius:7px;padding:10px;">${String(firstLine).replace(/</g, "&lt;")}</div>
-        <div style="font-size:10px;color:#8893a0;margin-top:14px;line-height:1.6;">💡 改对话:用顶栏「✨ AI 助手」生成,或直接编辑 chapters.json</div>`;
+        <div class="npc-dialogue-head">
+          <label class="pp-label">✎ 对话脚本 · ${dlg.length} 句</label>
+          ${sources.length > 1 ? `<select id="npcDialoguePage">${sources.map(s => `<option value="${s.key}" ${s.key === active.key ? "selected" : ""}>${s.label}</option>`).join("")}</select>` : ""}
+        </div>
+        <div style="font-size:9px;color:#6a7585;margin-top:5px;line-height:1.5;">${escapeHTML(condLabel)} · 分支和剧情指令会原样保留</div>
+        <div id="npcDialogueNodes">${nodeCards || `<div style="font-size:11px;color:#8893a0;padding:12px 0;">还没有台词，点下方按钮写第一句。</div>`}</div>
+        <button class="npc-dialogue-add" id="npcAddLine">＋ 追加一条收尾台词</button>
+        <div style="font-size:10px;color:#8893a0;margin-top:10px;line-height:1.6;">修改后点顶栏「💾 保存」，试玩会读取新台词。复杂分支仍可交给「✨ AI 助手」生成。</div>`;
       $("#ppClose").onclick = () => { ED.selectedNpc = null; renderInspector(); };
       const bSel = $("#npcBehavior");
       if (bSel) bSel.onchange = ev => { n.behavior = ev.target.value; markDirty(); renderInspector(); };
@@ -1673,6 +1737,25 @@
         if (hint) hint.innerHTML = bad.length
           ? `<span style="color:#ff9d4d">⚠️ ${bad.map(w => w.join(",")).join(" / ")} 在墙里/出界,角色走不到——换成可走格</span>`
           : `✓ ${wps.length} 个路径点全部可走`;
+      };
+      const pageSel = $("#npcDialoguePage");
+      if (pageSel) pageSel.onchange = ev => { n._dialogueView = ev.target.value; renderInspector(); };
+      panel.querySelectorAll(".npc-dialogue-node").forEach(card => {
+        const idx = +card.dataset.node;
+        const node = dlg[idx];
+        card.querySelector(".npc-speaker").oninput = ev => { node.speaker = ev.target.value; markDirty(); };
+        card.querySelector(".npc-line").oninput = ev => { node.text = ev.target.value; markDirty(); };
+      });
+      $("#npcAddLine").onclick = () => {
+        const next = dlg.length;
+        dlg.forEach(node => {
+          if ((!node.choices || !node.choices.length) && (node.goto == null || node.goto === "end")) node.goto = next;
+        });
+        dlg.push({ speaker: n.name, text: "在这里写下一句台词。", goto: "end" });
+        if (active.dialogue) active.dialogue.start = active.dialogue.start == null ? 0 : active.dialogue.start;
+        markDirty(); renderInspector();
+        const lines = panel.querySelectorAll(".npc-line");
+        if (lines.length) { lines[lines.length - 1].focus(); lines[lines.length - 1].select(); }
       };
     }
 
@@ -1795,20 +1878,25 @@
       if (ED.dirty) { showEdToast("有未保存的改动——先 💾 保存,再发布(发布的是已保存的版本)", true); return; }
       showPublishCard(ED.ch, validateForPublish(ED.ch));
     }
-    function shareLink(chId) { return `${location.origin}/index.html?play=${chId}`; }
+    function shareLink() {
+      // 保留当前部署目录，兼容 localhost、GitHub Pages 的 /repo/ 子路径和自定义域名。
+      const url = new URL("index.html", location.href);
+      url.search = ""; url.hash = ""; url.searchParams.set("play", "project");
+      return url.toString();
+    }
     function showPublishCard(ch, res) {
       const old = $("#edPublishCard"); if (old) old.remove();
       const errs = res.issues.filter(i => i.level === "error"), warns = res.issues.filter(i => i.level === "warn");
       const card = document.createElement("div"); card.id = "edPublishCard";
-      const link = shareLink(ch.id);
+      const link = shareLink();
       card.innerHTML = res.ok ? `
         <div class="pub-head ok">✅ 发布检查通过 <small>${res.checks} 项校验全过${warns.length ? ` · ${warns.length} 条提醒` : ""}</small></div>
-        <div class="pub-sub">读者打开下面的链接,不用安装、不用登录,直接走进《${ch.title} · ${ch.name}》。</div>
+        <div class="pub-sub">读者打开下面的链接,不用安装、不用登录,从世界地图走进《07号调查员》。</div>
         <div class="pub-link-row">
           <input id="pubLink" type="text" readonly value="${link}">
           <button id="pubCopy">复制链接</button>
         </div>
-        <div class="pub-note">🔗 这是<b>只读试玩</b>链接——读者能玩、能对话、能看调查日志,但看不到你的编辑器。<span class="pub-mock">本地 demo 链接;正式版会是 fenglingworks.com/p/xxxx 短链</span></div>
+        <div class="pub-note">🔗 这是<b>项目级只读试玩</b>链接——读者能逛世界、进场景、对话和看调查日志,但看不到编辑器。</div>
         ${warns.length ? `<div class="pub-warns">${warns.map(w => `<div>⚠️ ${w.msg}</div>`).join("")}</div>` : ""}
         <div class="pub-actions"><button id="pubPreview" class="pub-go">▶ 以读者身份预览</button><button id="pubClose2" class="pub-ghost">关闭</button></div>`
         : `
@@ -2149,7 +2237,10 @@
         walkable,
         spawn: ED.spawn,
         actorSize: ED.actorSize || 0, // 章节设置:角色尺寸(0=默认档)
-        npcs: ED.npcs.map(n => ({ id: n.id, pos: n.pos, behavior: n.behavior || "static", range: n.range || 0, waypoints: n.waypoints || [] })), // M5:行为随保存落盘
+        npcs: ED.npcs.map(n => ({
+          id: n.id, pos: n.pos, behavior: n.behavior || "static", range: n.range || 0, waypoints: n.waypoints || [],
+          dialogue: n.dialogue, dialogPages: n.dialogPages
+        })), // M5 行为 + 创作者台词随保存落盘
         props: (ED.props || []).map(p => ({ ...p })), // 全键透传,server 端按 id merge(防新字段被静默丢)
         gates: (ED.gates || []).map(g => ({ ...g, at: [...g.at] })) // 大门(传送口)可拖可改名
       };
@@ -2166,7 +2257,11 @@
           ED.ch.room.spawn = [...ED.spawn];
           ED.ch.npcs.forEach(n => {
             const updated = ED.npcs.find(x => x.id === n.id);
-            if (updated) n.pos = [...updated.pos];
+            if (updated) {
+              n.pos = [...updated.pos];
+              n.dialogue = JSON.parse(JSON.stringify(updated.dialogue));
+              if (updated.dialogPages) n.dialogPages = JSON.parse(JSON.stringify(updated.dialogPages));
+            }
           });
           ED.ch.props = patch.props;
           if (patch.gates && patch.gates.length) ED.ch.gates = patch.gates;
@@ -2387,6 +2482,8 @@
           // 同步本地 ch.npcs[].dialogue
           const target = ED.ch.npcs.find(n => n.id === npcId);
           if (target) target.dialogue = dialogue;
+          const editorNpc = ED.npcs.find(n => n.id === npcId);
+          if (editorNpc) editorNpc.dialogue = JSON.parse(JSON.stringify(dialogue));
           showEdToast(`AI 对话已应用到 ${npcId} · 进入试玩即可看到效果`);
           $("#edAI").classList.add("hide");
         } else {
@@ -2994,8 +3091,23 @@
         if (editCh && DATA.chapters.some(c => c.id === editCh)) { $("#worldmap").classList.add("hide"); setupEditor(editCh); window.__curScene = () => "editor:" + editCh; return; }
         const startRoom = params.get("room");
         if (startRoom && DATA.chapters.some(c => c.id === startRoom)) { $("#worldmap").classList.add("hide"); window.__roomStarted = startRoom; this.scene.start("room", { chapterId: startRoom }); return; }
-        // F7-A 读者分享链接 ?play=chId:只读试玩模式(藏创作者入口,进入作品)
+        // F7-A 读者分享链接 ?play=project:项目级只读试玩；旧 ?play=chId 继续兼容直达场景。
         const playCh = params.get("play");
+        if (playCh === "project") {
+          window.__readerMode = true;
+          document.body.classList.add("reader-mode");
+          showWorldMapView();
+          if (params.get("readerprobe") === "1") setTimeout(() => {
+            const rm = document.body.classList.contains("reader-mode");
+            const world = !$("#worldmap").classList.contains("hide");
+            const edBtn = $("#editorBtn"); const edHidden = !edBtn || getComputedStyle(edBtn).display === "none";
+            const out = `READERPROJECT rm=${rm} world=${world} editorHidden=${edHidden} ${rm && world && edHidden ? "PASS" : "FAIL"}`;
+            document.title = out;
+            const d = document.createElement("div"); d.id = "readerProjectOut"; d.textContent = out;
+            d.style.cssText = "position:fixed;top:0;left:0;z-index:99999;background:#000;color:#0f0;font:14px monospace;padding:8px"; document.body.appendChild(d);
+          }, 800);
+          return;
+        }
         if (playCh && DATA.chapters.some(c => c.id === playCh)) {
           window.__readerMode = true;
           document.body.classList.add("reader-mode");
@@ -3223,6 +3335,20 @@
         this.cursors = this.input.keyboard.createCursorKeys();
         this.wasd = this.input.keyboard.addKeys({ up: "W", down: "S", left: "A", right: "D" });
         this.keyTalk = this.input.keyboard.addKeys({ space: "SPACE", enter: "ENTER" });
+        this.tapPath = []; this.tapAction = null; this.tapTimer = null; this.tapMarker = null;
+        this.input.on("pointerdown", this.handleTapMove, this);
+        const interactBtn = document.querySelector("#interact");
+        interactBtn.onclick = ev => {
+          ev.preventDefault(); ev.stopPropagation();
+          if (this.dialogActive) return;
+          if (this.nearNPC) this.startDialog(this.nearNPC);
+          else if (this.nearProp) this.interactProp(this.nearProp);
+        };
+        this.events.once("shutdown", () => {
+          this.cancelTapMove();
+          this.input.off("pointerdown", this.handleTapMove, this);
+          if (interactBtn) interactBtn.onclick = null;
+        });
 
         showRoomUI(ch);
         this.updateNearNPC();
@@ -3242,6 +3368,7 @@
         window.__npcs = () => (this.npcs || []).map(n => ({ name: n.data.name, pos: [n.gx, n.gy] }));
         window.__near = () => this.nearNPC ? this.nearNPC.data.name : null;
         window.__talk = () => { if (this.nearNPC) { this.startDialog(this.nearNPC); return true; } return false; };
+        window.__tapMove = (x, y) => this.beginTapMove(x, y);
         window.__dialogState = () => this.dialogActive ? { speaker: document.querySelector("#dlgSpeaker").textContent, text: document.querySelector("#dlgText").textContent, choices: [...document.querySelectorAll("#dlgChoices button")].map(b => b.textContent) } : null;
         window.__click = (i) => { const bs = document.querySelectorAll("#dlgChoices button"); if (bs[i]) { bs[i].click(); return true; } return false; };
         window.__teleport = (x, y) => { this.gx = x; this.gy = y; const [px, py] = this.tileCenter(x, y); this.hero.x = px; this.hero.y = py; this.updateNearNPC(); return { pos: [this.gx, this.gy], near: this.nearNPC ? this.nearNPC.data.name : null }; };
@@ -3256,6 +3383,21 @@
         window.__iprops = () => (this.iprops || []).map(p => p.id);
         window.__propSprites = () => (this.propSprites || []).map(p => p.id || p);
         window.__gates = () => (this.gates || []).map(g => g.to);
+        // E2E:?tapto=x,y 走真实点击寻路队列并报告落点。
+        const tapto = new URLSearchParams(location.search).get("tapto");
+        if (tapto) {
+          const [tx, ty] = tapto.split(",").map(Number);
+          let started = false;
+          // create() 尚未退出时 ScenePlugin 还未标 active；模拟真实用户在画面就绪后点击。
+          setTimeout(() => { started = Number.isFinite(tx) && Number.isFinite(ty) && this.beginTapMove(tx, ty); }, 520);
+          setTimeout(() => {
+            const arrived = this.gx === tx && this.gy === ty;
+            const res = `TAPMOVE target=${tx},${ty} now=${this.gx},${this.gy} started=${!!started} ${arrived ? "PASS" : "FAIL"}`;
+            document.title = res;
+            const d = document.createElement("div"); d.id = "tapMoveOut"; d.textContent = res;
+            d.style.cssText = "position:fixed;top:0;left:0;z-index:99999;background:#000;color:#0f0;font:14px monospace;padding:8px"; document.body.appendChild(d);
+          }, 3000);
+        }
         // E2E:?simgate=chX 传送到大门旁→走上门格→断言切到目标设施场景
         const simgate = new URLSearchParams(location.search).get("simgate");
         if (simgate && (this.gates || []).some(g => g.to === simgate) && !window.__simgateDone) {
@@ -3536,6 +3678,8 @@
         document.querySelector("#dialog").classList.add("hide");
         document.querySelector("#dlgChoices").innerHTML = "";
         this.updateNearNPC();
+        // 条件型 auto 终局在玩家补齐最后一条线索后可立即触发，不必退出重进场景。
+        setTimeout(() => this.checkTriggers("auto"), 180);
       }
       spawnFx(effect) {
         // 通用镜头效果(无需素材,克制档):scanline_tear=闪+微震 / shake=震 / flash=暗闪
@@ -3547,6 +3691,91 @@
         } catch (e) {}
       }
       tileCenter(cx, cy) { return [this.offX + cx * this.TILE + this.TILE / 2, this.offY + cy * this.TILE + this.TILE / 2]; }
+      cancelTapMove() {
+        this.tapPath = []; this.tapAction = null;
+        if (this.tapTimer) clearTimeout(this.tapTimer);
+        this.tapTimer = null;
+      }
+      showTapMarker(gx, gy, ok) {
+        if (this.tapMarker) this.tapMarker.destroy();
+        const [px, py] = this.tileCenter(gx, gy);
+        this.tapMarker = this.add.circle(px, py, this.TILE * 0.38, ok ? 0x6fd3c4 : 0xff7a7a, 0.18)
+          .setStrokeStyle(1.5, ok ? 0x6fd3c4 : 0xff7a7a, 0.95).setDepth(9000);
+        this.tweens.add({ targets: this.tapMarker, scale: 1.65, alpha: 0, duration: 520, ease: "Sine.easeOut", onComplete: () => {
+          if (this.tapMarker) { this.tapMarker.destroy(); this.tapMarker = null; }
+        } });
+      }
+      handleTapMove(pointer) {
+        if (this.dialogActive || !this.hero) return;
+        const p = pointer.positionToCamera(this.cameras.main);
+        const gx = Math.floor((p.x - this.offX) / this.TILE), gy = Math.floor((p.y - this.offY) / this.TILE);
+        if (gx < 0 || gy < 0 || gx >= this.COLS || gy >= this.ROWS) return;
+        this.beginTapMove(gx, gy);
+      }
+      beginTapMove(tx, ty) {
+        if (this.dialogActive || !Number.isFinite(tx) || !Number.isFinite(ty)) return false;
+        tx = Math.floor(tx); ty = Math.floor(ty);
+        if (tx < 0 || ty < 0 || tx >= this.COLS || ty >= this.ROWS) return false;
+        this.cancelTapMove();
+        const npc = (this.npcs || []).find(n => n.gx === tx && n.gy === ty);
+        const prop = (this.iprops || []).find(p => tx >= p.x0 && tx <= p.x1 && ty >= p.y0 && ty <= p.y1);
+        const candidates = [];
+        if (npc) {
+          [[1, 0], [-1, 0], [0, 1], [0, -1]].forEach(([dx, dy]) => candidates.push([npc.gx + dx, npc.gy + dy]));
+          this.tapAction = { type: "npc", id: npc.data.id };
+        } else if (prop) {
+          for (let x = prop.x0; x <= prop.x1; x++) { candidates.push([x, prop.y0 - 1], [x, prop.y1 + 1]); }
+          for (let y = prop.y0; y <= prop.y1; y++) { candidates.push([prop.x0 - 1, y], [prop.x1 + 1, y]); }
+          for (let y = prop.y0; y <= prop.y1; y++) for (let x = prop.x0; x <= prop.x1; x++) candidates.push([x, y]);
+          this.tapAction = { type: "prop", id: prop.id };
+        } else if (this.canWalk(tx, ty) || (tx === this.gx && ty === this.gy)) {
+          candidates.push([tx, ty]);
+        } else {
+          // 点到墙体时，落到其最近的可走邻格，降低手机小屏误触成本。
+          for (let r = 1; r <= 2; r++) for (let y = ty - r; y <= ty + r; y++) for (let x = tx - r; x <= tx + r; x++) {
+            if (Math.abs(x - tx) + Math.abs(y - ty) === r) candidates.push([x, y]);
+          }
+        }
+        const valid = new Set(candidates.filter(([x, y]) => x >= 0 && y >= 0 && x < this.COLS && y < this.ROWS && ((x === this.gx && y === this.gy) || this.canWalk(x, y))).map(p => p.join(",")));
+        const startKey = `${this.gx},${this.gy}`;
+        const q = [[this.gx, this.gy]]; let qi = 0, found = valid.has(startKey) ? startKey : null;
+        const prev = new Map(); const seen = new Set([startKey]);
+        const steps = [[1, 0, "right"], [-1, 0, "left"], [0, 1, "down"], [0, -1, "up"]];
+        while (!found && qi < q.length) {
+          const [x, y] = q[qi++];
+          for (const [dx, dy, dir] of steps) {
+            const nx = x + dx, ny = y + dy, key = `${nx},${ny}`;
+            if (seen.has(key) || !this.canWalk(nx, ny)) continue;
+            seen.add(key); prev.set(key, { from: `${x},${y}`, dir });
+            if (valid.has(key)) { found = key; break; }
+            q.push([nx, ny]);
+          }
+        }
+        if (!found) { this.tapAction = null; this.showTapMarker(tx, ty, false); return false; }
+        const path = [];
+        for (let cur = found; cur !== startKey;) { const p = prev.get(cur); if (!p) break; path.unshift(p.dir); cur = p.from; }
+        this.tapPath = path;
+        const [mx, my] = found.split(",").map(Number); this.showTapMarker(mx, my, true);
+        this.stepTapMove();
+        return true;
+      }
+      stepTapMove() {
+        if (this.dialogActive || !this.scene || !this.scene.isActive()) { this.cancelTapMove(); return; }
+        if (!this.tapPath.length) {
+          const action = this.tapAction; this.tapAction = null;
+          if (action && action.type === "npc") {
+            const npc = (this.npcs || []).find(n => n.data.id === action.id);
+            if (npc && Math.abs(npc.gx - this.gx) + Math.abs(npc.gy - this.gy) === 1) this.startDialog(npc);
+          } else if (action && action.type === "prop") {
+            const prop = (this.iprops || []).find(p => p.id === action.id);
+            if (prop) this.interactProp(prop);
+          }
+          return;
+        }
+        const dir = this.tapPath.shift();
+        if (!this.tryMove(dir)) { this.cancelTapMove(); return; }
+        this.tapTimer = setTimeout(() => this.stepTapMove(), 150);
+      }
       canWalk(cx, cy) {
         if (!(cx >= 0 && cy >= 0 && cx < this.COLS && cy < this.ROWS && this.MAP[cy][cx] === 0)) return false;
         if ((this.npcs || []).some(n => n.gx === cx && n.gy === cy)) return false; // NPC 占格不可走入
@@ -3613,10 +3842,10 @@
         // 走近可交互物件按空格/回车 → 弹 interactText
         if (this.nearProp && (Phaser.Input.Keyboard.JustDown(this.keyTalk.space) || Phaser.Input.Keyboard.JustDown(this.keyTalk.enter))) { this.interactProp(this.nearProp); return; }
         const c = this.cursors, w = this.wasd;
-        if (c.left.isDown || w.left.isDown) this.tryMove("left");
-        else if (c.right.isDown || w.right.isDown) this.tryMove("right");
-        else if (c.up.isDown || w.up.isDown) this.tryMove("up");
-        else if (c.down.isDown || w.down.isDown) this.tryMove("down");
+        if (c.left.isDown || w.left.isDown) { this.cancelTapMove(); this.tryMove("left"); }
+        else if (c.right.isDown || w.right.isDown) { this.cancelTapMove(); this.tryMove("right"); }
+        else if (c.up.isDown || w.up.isDown) { this.cancelTapMove(); this.tryMove("up"); }
+        else if (c.down.isDown || w.down.isDown) { this.cancelTapMove(); this.tryMove("down"); }
       }
       updateNearNPC() {
         let near = null;
@@ -3657,10 +3886,10 @@
         this.startDialog({ data: { name: ip.name, silent: true, dialogue: { start: 0, nodes: [{ speaker: ip.name, text, goto: "end" }] } } });
       }
       startDialog(npc) {
-        // M5 条件对话页:dialogPages 从上到下找第一个条件满足的页(末页通常无条件=默认页);没有 dialogPages 走旧 dialogue
+        // M5 条件对话页:从上到下找第一个满足页；都不满足就回退首次对话。
         let dlg = npc.data.dialogue;
         if (npc.data.dialogPages && npc.data.dialogPages.length) {
-          const page = npc.data.dialogPages.find(p => condsMet(p.conditions)) || npc.data.dialogPages[npc.data.dialogPages.length - 1];
+          const page = npc.data.dialogPages.find(p => condsMet(p.conditions));
           if (page && page.dialogue) dlg = page.dialogue;
         }
         if (!dlg || !dlg.nodes || !dlg.nodes.length) return;
@@ -3733,6 +3962,7 @@
         const talking = this.curTalkingNpc;
         if (this.ch.clue && !(talking && talking.data.silent) && !hasRecordId(this.ch.id)) { saveRecordId(this.ch.id); buildRecords(); showClueToast(this.ch.clue); }
         this.updateNearNPC();
+        setTimeout(() => this.checkTriggers("auto"), 180);
       }
     }
 
