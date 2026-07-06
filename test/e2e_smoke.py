@@ -756,6 +756,37 @@ def g_mechanics():
         path.write_text(backup2, encoding="utf-8")
 
 
+def g_template():
+    # 引导机制=模板即引导:新建项目模板选择器→建可玩起手式(非破坏,备份还原)
+    path = ROOT / "chapters.json"
+    backup = path.read_text(encoding="utf-8")
+    try:
+        # 1) simtpl 探针:建「调查推理」模板→回读落盘,验 npc/触发器数
+        #    key=(?!\$\{) 负向断言:排开源码里 `SIMTPL key=${simtpl}` 模板字面量的假匹配
+        m = None
+        for _ in range(2):
+            dom = dump_dom(f"{BASE}/index.html?simtpl=investigate&_={ns()}", 11000)
+            mm = re.search(r"SIMTPL key=(?!\$\{)[^<]*", dom)
+            if mm:
+                m = mm.group(0)
+                if "PASS" in m:
+                    break
+        rec("TEMPLATE", "模板选择器:建「调查推理」起手式→落盘(npc+触发器+线索+物件)", bool(m and "PASS" in m), m or "探针未触发")
+        # 2) 模板建出的房间必须真能玩:载入零 JS 报错(simtpl 已把 draft_tpl_e2e 写盘)
+        ok2, detail2 = False, "房间未载入"
+        for _ in range(2):
+            dom2 = dump_dom(f"{BASE}/index.html?room=draft_tpl_e2e&e2e=1&_={ns()}", 11000)
+            if '"roomStarted":"draft_tpl_e2e"' in dom2:
+                ok2 = '"errors":[]' in dom2
+                detail2 = "零报错" if ok2 else "有 JS 报错"
+                if ok2:
+                    break
+        rec("TEMPLATE", "模板建出的房间可玩:载入零 JS 报错", ok2, detail2)
+    finally:
+        path.write_text(backup, encoding="utf-8")
+        rec("TEMPLATE", "chapters.json 测试后已还原", path.read_text(encoding="utf-8") == backup)
+
+
 def g_save():
     path = ROOT / "chapters.json"
     backup = path.read_text(encoding="utf-8")
@@ -811,6 +842,7 @@ def main():
     g_semantic(d)
     g_publish()
     g_mechanics()
+    g_template()
     g_save()
 
     # 报告
@@ -819,7 +851,7 @@ def main():
         groups.setdefault(g, []).append((n, ok, detail))
     fails = 0
     warns = 0
-    for g in ["FILE", "PIXEL", "LOAD", "DRAG", "INTERACT", "AREA", "WORLDMAP", "EVENT", "GAMEPLAY", "AICMD", "SEMANTIC", "PUBLISH", "MECH", "SAVE"]:
+    for g in ["FILE", "PIXEL", "LOAD", "DRAG", "INTERACT", "AREA", "WORLDMAP", "EVENT", "GAMEPLAY", "AICMD", "SEMANTIC", "PUBLISH", "MECH", "TEMPLATE", "SAVE"]:
         if g not in groups:
             continue
         print(f"\n[{g}]")

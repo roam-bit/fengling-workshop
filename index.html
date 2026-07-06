@@ -2674,6 +2674,132 @@
     }
 
     // ===== 凤翎工坊 Landing 页(平台首页,默认入口)=====
+    // ===== 引导机制:模板即引导 —— 新建项目不再丢进空房间,而是从"能直接玩的起手式"开始 =====
+    // 每个模板 = 一个最小可玩闭环(现场已布好),创作者一进去就看到"它已经能跑",再在上面改。
+    // 同时落地"玩法套餐"概念:品类内叙事玩法子类型(调查推理/对话抉择…),各对应不同小说题材。
+    function _tplWalk(W, H) {
+      return Array.from({ length: H }, (_, y) => Array.from({ length: W }, (_, x) => (x === 0 || y === 0 || x === W - 1 || y === H - 1) ? "1" : "0").join(""));
+    }
+    const NEW_TEMPLATES = [
+      {
+        key: "blank", icon: "▧", name: "空白项目", tag: "自由发挥",
+        desc: "一个只有四面墙的空房间。拖入单元、刷出墙体、让 AI 写第一句台词——从零开始搭。",
+        teaches: ["拖拽摆放", "刷碰撞墙", "AI 写对话"],
+        build: (id, n) => ({
+          id, title: "草稿", name: "未命名场景 " + n, place: "新项目 · 空白模板", locked: false,
+          hook: "从一个空房间开始——拖入单元、刷出墙体、让 AI 写第一段对话。",
+          room: { cols: 20, rows: 12, spawn: [3, 3], walkable: _tplWalk(20, 12) },
+          npcs: [{ id: "unit_a", name: "未命名单元", pos: [10, 6], dialogue: { start: 0, nodes: [{ speaker: "未命名单元", text: "（在编辑器里，给我写下第一句台词吧。）", goto: "end" }] } }],
+          props: []
+        })
+      },
+      {
+        key: "investigate", icon: "🔍", name: "调查推理 · 起手式", tag: "悬疑 / 探案题材",
+        desc: "现场已布好:一位目击者、一份可翻阅的档案、一条进场就触发的旁白。走一圈就懂「探索→对话→线索」怎么串。",
+        teaches: ["分支对话", "可交互物证", "触发器 + 调查日志"],
+        build: (id, n) => ({
+          id, title: "草稿", name: "调查现场 " + n, place: "调查推理 · 起手模板", locked: false,
+          hook: "有人在这里消失了。翻档案、问目击者、拼出那晚发生了什么。",
+          room: { cols: 22, rows: 13, spawn: [3, 6], walkable: _tplWalk(22, 13) },
+          clues: [{ id: "clue_scene", name: "现场第一印象", detail: "桌上的茶还是温的——离开得很急，却没带走随身的东西。" }],
+          triggers: [{
+            id: "tr_enter", type: "auto", at: [0, 0], area: [22, 13], once: true, conditions: {},
+            actions: [
+              { type: "text", speaker: "", content: "（门虚掩着。屋里没有人，但灯还亮着——凤翎把这一点记了下来。）" },
+              { type: "addClue", clueId: "clue_scene" }
+            ]
+          }],
+          npcs: [{
+            id: "witness", name: "目击者·老周", pos: [12, 6],
+            dialogue: {
+              start: 0, nodes: [
+                { speaker: "目击者·老周", text: "你也是来查那晚的事的？我……不确定该不该说。", choices: [{ label: "把你看到的都告诉我", goto: 1 }, { label: "你在害怕什么", goto: 2 }] },
+                { speaker: "目击者·老周", text: "那晚有个人影，绕到楼后就再没出来。我发誓我没看错。", goto: "end" },
+                { speaker: "目击者·老周", text: "……算了，当我没说。你自己去翻那份档案吧。", goto: "end" }
+              ]
+            }
+          }],
+          props: [{
+            id: "case_file", name: "散落的档案", pos: [17, 6], size: [1, 1], footprint: 1, isInteractable: true,
+            interactText: "泛黄的纸页，最后一行被人用力划掉了。你把它收进随身。",
+            givesItemId: "note_01", givesItemName: "泛黄便签"
+          }]
+        })
+      },
+      {
+        key: "dialogue", icon: "💬", name: "对话抉择 · 起手式", tag: "言情 / 群像 / 多结局题材",
+        desc: "两位 NPC:先和旧友说上话，守门人就会「记得你来过」——现成演示条件对话页 + 标志位，多结局叙事的地基。",
+        teaches: ["条件对话页", "标志位记忆", "NPC 关系"],
+        build: (id, n) => ({
+          id, title: "草稿", name: "重逢 " + n, place: "对话抉择 · 起手模板", locked: false,
+          hook: "先和旧友说上话，守门人的态度就会不一样——一句话决定一条线。",
+          room: { cols: 22, rows: 13, spawn: [3, 6], walkable: _tplWalk(22, 13) },
+          npcs: [
+            {
+              id: "qinghe", name: "旧友·青禾", pos: [9, 6],
+              dialogue: {
+                start: 0, nodes: [
+                  { speaker: "旧友·青禾", text: "是你啊……好久不见。前面那位守门人，你去跟他说是我让你来的。", goto: 1 },
+                  { speaker: "旧友·青禾", text: "（她朝守门人的方向点了点头。）", do: [{ type: "set", flag: "met_qinghe" }], goto: "end" }
+                ]
+              }
+            },
+            {
+              id: "gate", name: "守门人", pos: [15, 6],
+              dialogPages: [
+                { conditions: { flags: ["met_qinghe"] }, dialogue: { start: 0, nodes: [{ speaker: "守门人", text: "青禾的朋友？早说啊。进去吧，她等你很久了。", goto: "end" }] } },
+                { conditions: {}, dialogue: { start: 0, nodes: [{ speaker: "守门人", text: "生人免进。除非……你能报出一个我认识的名字。", goto: "end" }] } }
+              ]
+            }
+          ],
+          props: []
+        })
+      }
+    ];
+    // 从模板创建:走 createChapter 最小闭环 → 直接进编辑器(与旧空白流程一致,只是内容更足)
+    async function createFromTemplate(tplKey) {
+      const draftN = DATA.chapters.filter(c => /^draft\d+$/.test(c.id)).length;
+      const n = draftN + 1, id = "draft" + n;
+      const tpl = (NEW_TEMPLATES.find(t => t.key === tplKey) || NEW_TEMPLATES[0]).build(id, n);
+      try {
+        const res = await fetch("/api/save-chapter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ createChapter: tpl }) });
+        const out = await res.json();
+        if (out.ok) location.href = `/index.html?edit=${id}&_=${Date.now()}`;
+        else showClueToast(out.error || "未知错误", "⚠️ 创建失败");
+      } catch (e) { showClueToast("server 未运行?(要跑 python3 server.py)", "⚠️ 创建失败"); }
+    }
+    // 模板选择器浮层:点"新建项目"弹出,选一个起手式
+    function openTemplatePicker() {
+      let ov = document.getElementById("tplPicker");
+      if (!ov) { ov = document.createElement("div"); ov.id = "tplPicker"; document.body.appendChild(ov); }
+      ov.style.cssText = "position:fixed;inset:0;z-index:80;background:#05070be8;display:flex;align-items:center;justify-content:center;padding:24px;";
+      const cards = NEW_TEMPLATES.map(t => `
+        <div class="tpl-card" data-tpl="${t.key}" tabindex="0" style="flex:1;min-width:220px;max-width:300px;background:#0e141d;border:1px solid #ffffff14;border-radius:14px;padding:20px;cursor:pointer;transition:.16s;display:flex;flex-direction:column;">
+          <div style="font-size:30px;margin-bottom:8px;">${t.icon}</div>
+          <div style="font-size:16px;font-weight:700;color:#eaeef5;margin-bottom:3px;">${t.name}</div>
+          <div style="font-size:10px;font-family:'Courier New',monospace;color:#6fd3c4;margin-bottom:12px;letter-spacing:.5px;">${t.tag}</div>
+          <div style="font-size:12px;line-height:1.6;color:#aab3c0;flex:1;">${t.desc}</div>
+          <div style="margin-top:14px;display:flex;flex-wrap:wrap;gap:5px;">${t.teaches.map(x => `<span style="font-size:9px;padding:2px 7px;background:#6fd3c414;color:#6fd3c4;border-radius:20px;">${x}</span>`).join("")}</div>
+          <div class="tpl-go" style="margin-top:14px;text-align:center;padding:9px;border-radius:8px;background:#6fd3c418;color:#6fd3c4;font-size:12px;font-weight:600;">用这个起手式 →</div>
+        </div>`).join("");
+      ov.innerHTML = `
+        <div style="width:100%;max-width:1000px;">
+          <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:6px;">
+            <h2 style="font-size:20px;color:#eaeef5;margin:0;">选一个起手式 <span style="font-size:12px;color:#6fd3c4;font-weight:400;">· 模板即引导</span></h2>
+            <button id="tplClose" style="background:none;border:1px solid #ffffff22;color:#aab3c0;border-radius:8px;padding:6px 12px;cursor:pointer;font-size:13px;">✕ 取消</button>
+          </div>
+          <p style="font-size:12px;color:#8a95a3;margin:0 0 20px;line-height:1.6;">不必从白纸开始——每个起手式都是一个<b style="color:#c8d0da;">现成能玩的最小场景</b>，进编辑器直接改台词、拖单元、试玩。不懂技术也能先跑起来，再慢慢加东西。</p>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">${cards}</div>
+        </div>`;
+      const close = () => { ov.remove(); };
+      ov.onclick = e => { if (e.target === ov) close(); };
+      document.getElementById("tplClose").onclick = close;
+      ov.querySelectorAll(".tpl-card").forEach(c => {
+        c.onmouseenter = () => { c.style.borderColor = "#6fd3c455"; c.style.transform = "translateY(-3px)"; c.querySelector(".tpl-go").style.background = "#6fd3c4"; c.querySelector(".tpl-go").style.color = "#03120f"; };
+        c.onmouseleave = () => { c.style.borderColor = "#ffffff14"; c.style.transform = ""; c.querySelector(".tpl-go").style.background = "#6fd3c418"; c.querySelector(".tpl-go").style.color = "#6fd3c4"; };
+        c.onclick = () => createFromTemplate(c.dataset.tpl);
+      });
+    }
     function buildLanding() {
       const records = loadRecords(), branches = loadBranches();
       const exploredCount = records.length;
@@ -2734,9 +2860,9 @@
             <div class="lp-card placeholder" id="lpNewProject">
               <div class="lp-thumb" style="display:flex;align-items:center;justify-content:center;font-size:36px;color:#6fd3c455;">+</div>
               <div class="lp-info">
-                <h3>新建空白项目</h3>
-                <div class="lp-desc">上传文档 → AI 解析 → 选模式 → 进入编辑器</div>
-                <div class="lp-stats"><span>预计 5 分钟搭出第一篇</span></div>
+                <h3>新建项目 <span class="lp-badge" style="background:#6fd3c418;color:#6fd3c4;">模板起手</span></h3>
+                <div class="lp-desc">选一个能直接玩的起手式:空白 / 调查推理 / 对话抉择——不必从白纸开始。</div>
+                <div class="lp-stats"><span>模板即引导 · 5 分钟改出第一篇</span></div>
               </div>
               <div class="lp-arrow">→</div>
             </div>
@@ -2827,25 +2953,12 @@
       $("#lpEnter07").onclick = () => showWorldMapView();
       // "🛠 进编辑器"按钮 → 直跳 ch4 编辑器(场景 3/4 入口)
       $("#lpEditCh4").onclick = () => { location.href = `/index.html?edit=ch4&_=${Date.now()}`; };
-      // 新建空白项目:空房模板 → POST 追加一章 → 直接进编辑器(审查 P1:"5分钟搭出第一篇"要能正面演示)
+      // 新建项目:弹模板选择器(引导机制=模板即引导),选一个起手式 → POST 追加一章 → 进编辑器
       // F7-B 免费层拦截:免费版限 1 个用户项目(07号是预置样品,不计);已有 draft 时弹升级
-      $("#lpNewProject").onclick = async () => {
+      $("#lpNewProject").onclick = () => {
         const draftN = DATA.chapters.filter(c => /^draft\d+$/.test(c.id)).length;
         if (draftN >= 1) { showUpgradePrompt(); return; }
-        const n = draftN + 1;
-        const id = "draft" + n, W = 20, H = 12;
-        const wk = Array.from({ length: H }, (_, y) => Array.from({ length: W }, (_, x) => (x === 0 || y === 0 || x === W - 1 || y === H - 1) ? "1" : "0").join(""));
-        const tpl = { id, title: "草稿", name: "未命名场景 " + n, place: "新项目 · 空白模板", locked: false,
-          hook: "从一个空房间开始——拖入单元、刷出墙体、让 AI 写第一段对话。",
-          room: { cols: W, rows: H, spawn: [3, 3], walkable: wk },
-          npcs: [{ id: "unit_a", name: "未命名单元", pos: [10, 6], dialogue: { start: 0, nodes: [{ speaker: "未命名单元", text: "（在编辑器里，给我写下第一句台词吧。）", goto: "end" }] } }],
-          props: [] };
-        try {
-          const res = await fetch("/api/save-chapter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ createChapter: tpl }) });
-          const out = await res.json();
-          if (out.ok) location.href = `/index.html?edit=${id}&_=${Date.now()}`;
-          else showClueToast(out.error || "未知错误", "⚠️ 创建失败");
-        } catch (e) { showClueToast("server 未运行?(要跑 python3 server.py)", "⚠️ 创建失败"); }
+        openTemplatePicker();
       };
       // 第二种创作模式:事件主导 → 直接体验番外
       const evBtn = $("#lpModeEvent"); if (evBtn) evBtn.onclick = () => playEvent(DATA.eventDemo);
@@ -3274,6 +3387,33 @@
               const d = document.createElement("div"); d.id = "simUpgOut"; d.textContent = out;
               d.style.cssText = "position:fixed;top:0;left:0;z-index:99999;background:#000;color:#0f0;font:14px monospace;padding:8px"; document.body.appendChild(d);
             }, 250);
+          }, 600);
+          return;
+        }
+        // 引导机制:?tpl=1 自动开模板选择器(截图) / ?simtpl=investigate 建模板→回读落盘(E2E,非破坏靠脚本备份还原)
+        if (params.get("tpl") === "1") { showLanding(); setTimeout(openTemplatePicker, 500); return; }
+        const simtpl = params.get("simtpl");
+        if (simtpl && !window.__simtplDone) {
+          window.__simtplDone = true;
+          showLanding();
+          setTimeout(async () => {
+            const id = "draft_tpl_e2e";
+            const t = NEW_TEMPLATES.find(x => x.key === simtpl) || NEW_TEMPLATES[0];
+            const tpl = t.build(id, 1);
+            let ok = false, applied = "", npcN = 0, trN = 0;
+            try {
+              const res = await fetch("/api/save-chapter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ createChapter: tpl }) });
+              const out = await res.json();
+              const fresh = await (await fetch("chapters.json?_=" + Date.now())).json();
+              const ch = fresh.chapters.find(c => c.id === id);
+              ok = out.ok && !!ch; applied = (out.applied || []).join(",");
+              if (ch) { npcN = (ch.npcs || []).length; trN = (ch.triggers || []).length; }
+            } catch (e) {}
+            const pass = ok && applied.indexOf("createChapter") >= 0;
+            const outS = `SIMTPL key=${simtpl} ok=${ok} npc=${npcN} trig=${trN} ${pass ? "PASS" : "FAIL"}`;
+            document.title = outS;
+            const d = document.createElement("div"); d.id = "simTplOut"; d.textContent = outS;
+            d.style.cssText = "position:fixed;top:0;left:0;z-index:99999;background:#000;color:#0f0;font:14px monospace;padding:8px"; document.body.appendChild(d);
           }, 600);
           return;
         }
