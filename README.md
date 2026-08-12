@@ -4,7 +4,11 @@
 
 ![游戏画面](docs/readme-assets/game.png)
 
-**[在线试玩《07 号调查员》](https://roam-bit.github.io/fengling-workshop/index.html?play=project)** · 手机可直接打开（建议横屏）；想试编辑器请用电脑。
+**在线看**（两个入口，按你想看什么选）：
+- **[平台首页 →](https://roam-bit.github.io/fengling-workshop/)** 看完整产品（平台 + 项目 + 编辑器入口），推荐从这里进
+- **[直接试玩游戏 →](https://roam-bit.github.io/fengling-workshop/index.html?play=project)** 读者视角的只读分享链接，跳过平台直接进世界地图
+
+手机可直接打开（建议横屏）；编辑器请用电脑。⚠️ 在线版是纯静态托管，**编辑器的保存 / AI 命令需要本地跑**（见下）。
 
 ## ✨ 这是什么
 
