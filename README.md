@@ -106,7 +106,8 @@ AGENTS.md           给 AI 编程工具的项目地图（用 Codex / Claude Code
 这个项目就是全程 AI 辅助开发的，也为"被 AI 修改"做了准备：
 
 - **改剧情 / 地图 / NPC / 对话 / 机制**：不用碰代码——打开编辑器（`?edit=章节id`）可视化改，或直接编辑 `chapters.json`（单一数据源）。
-- **用 Codex / Claude Code / Cursor 改代码**：仓库根目录的 [`AGENTS.md`](AGENTS.md) 是给 AI 工具的项目地图（架构、改法配方、验证方式、已知坑），AI 会自动读取它。
+- **用 Codex / Claude Code / Cursor 改代码**：仓库根目录的 [`AGENTS.md`](AGENTS.md) 是给 AI 工具的项目地图（架构、改法配方、验证方式、已知坑），AI 会自动读取它。直接下命令即可，例如「给陈伯加一句台词」「做一个走近就触发旁白的机制」「加一个会巡逻的 NPC」。
+  > 💡 **server 自己在终端跑着别关**（`python3 server.py` 是常驻进程），不要让 AI 代跑——它会一直卡在那等。改完前端刷新浏览器即可；改了 `server.py` 才需要重启。
 - **改完怎么验证**：起 server 后跑 `python3 test/e2e_smoke.py`，200+ 项自动检查全绿即可放心。
 
 ## 📜 License
