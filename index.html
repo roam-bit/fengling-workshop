@@ -3,6 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
 <title>凤翎工坊 · 07号调查员</title>
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -725,7 +726,7 @@
       <div class="h7-title">07号调查员</div>
       <div class="h7-rule"></div>
       <div class="h7-sub">一部可以走进去的小说</div>
-      <div class="h7-chips"><span class="h7-chip">12 处地点档案</span><span class="h7-chip">31 位人物</span><span class="h7-chip">1 个真相</span></div>
+      <div class="h7-chips"><span class="h7-chip">4 篇现场档案</span><span class="h7-chip">7 位在场单元</span><span class="h7-chip">1 个真相</span></div>
       <div class="h7-cta">
         <button class="h7-enter" id="h7Enter">进入档案</button>
         <button class="h7-platform" id="h7Platform">了解凤翎工坊平台 →</button>
@@ -1014,16 +1015,31 @@
         (needsPropArt ? `　<span style="font-size:10px;color:#8893a0;border:1px dashed #8893a055;border-radius:4px;padding:2px 7px;font-family:'Courier New',monospace;" title="创作者可随时用 AI 为该场景生成物件贴图">线框模式 · 待贴美术</span>` : "");
       // 从区域大地图进的设施:返回按钮指回区域;区域本身/直进设施:返回世界图
       const fromArea = (window.__fromArea && window.__fromArea !== ch.id) ? DATA.chapters.find(c => c.id === window.__fromArea) : null;
-      // F7-A 读者模式:藏"返回世界"(那是创作者视角),返回键改"从头开始";顶部挂只读角标
+      // F7-A 读者模式:返回键=「← 返回地图」(回世界图继续逛,不再是吓人的整页 reload);顶部挂只读角标
       if (window.__readerMode) {
         const rb = $("#readerBadge"); if (rb) rb.classList.remove("hide");
         const bb = $("#backBtn");
-        if (fromArea) { bb.textContent = `← 返回${fromArea.name}`; }
-        else { bb.textContent = "↻ 从头开始"; bb.onclick = () => location.reload(); }
+        bb.onclick = () => window.__backToWorld(); // 显式恢复,防历史 reload 覆盖残留
+        bb.textContent = fromArea ? `← 返回${fromArea.name}` : "← 返回地图";
       } else {
         const rb = $("#readerBadge"); if (rb) rb.classList.add("hide");
         $("#backBtn").textContent = fromArea ? `← 返回${fromArea.name}` : "← 返回世界";
       }
+    }
+    // 读者分享链接的一次性欢迎条(零上下文观众进场引导;点按钮或 12s 后淡出)
+    function showReaderWelcome() {
+      if (document.getElementById("readerWelcome")) return;
+      const d = document.createElement("div");
+      d.id = "readerWelcome";
+      d.style.cssText = "position:fixed;top:52px;left:50%;transform:translateX(-50%);z-index:70;max-width:min(560px,92vw);background:#0b1119ee;border:1px solid #6fd3c455;border-radius:12px;padding:14px 18px;box-shadow:0 8px 40px #000a;backdrop-filter:blur(6px);text-align:center;";
+      d.innerHTML = `
+        <div style="font-size:15px;color:#eaeef5;font-weight:700;margin-bottom:4px;">《07 号调查员》—— 一部可以走进去的小说</div>
+        <div style="font-size:12px;color:#aab3c0;line-height:1.6;margin-bottom:10px;">2095 年,异常区域外围。你是调查员凤翎。<b style="color:#6fd3c4;">点击地图上发光的地点</b>进入现场,与单元对话、收集线索——小说写到哪,地图亮到哪。</div>
+        <button id="rwGo" style="background:#6fd3c4;color:#03120f;border:none;border-radius:8px;padding:8px 22px;font-size:13px;font-weight:700;cursor:pointer;">开始探索 →</button>`;
+      document.body.appendChild(d);
+      const fade = () => { d.style.transition = "opacity .5s"; d.style.opacity = "0"; setTimeout(() => d.remove(), 550); };
+      const goBtn = d.querySelector("#rwGo"); if (goBtn) goBtn.onclick = fade;
+      setTimeout(() => { if (document.getElementById("readerWelcome")) fade(); }, 12000);
     }
     // ===== 世界地图 v2(澜洲大陆:像素整图 + 9 区战雾 + 地点徽章 + 富档案面板) =====
     function locUnlocked(loc) { return !loc.requires || loadRecords().length >= loc.requires; }
@@ -2408,15 +2424,15 @@
     function playRoom() {
       if (ED.dirty) {
         if (!confirm("有未保存的改动,要先保存再试玩吗?(取消则丢弃)")) return;
-        saveChapter().then(() => { setTimeout(() => location.replace(`/index.html?room=${ED.ch.id}&_=${Date.now()}`), 600); });
+        saveChapter().then(() => { setTimeout(() => location.replace(`index.html?room=${ED.ch.id}&_=${Date.now()}`), 600); });
         return;
       }
-      location.replace(`/index.html?room=${ED.ch.id}&_=${Date.now()}`);
+      location.replace(`index.html?room=${ED.ch.id}&_=${Date.now()}`);
     }
 
     function exitEditor() {
       if (ED.dirty && !confirm("有未保存的改动,确认退出吗?")) return;
-      location.replace(`/index.html?_=${Date.now()}`);
+      location.replace(`index.html?_=${Date.now()}`);
     }
 
     // ===== M7 AI 命令层(编辑器客户端):说人话 → /api/ai-command → 命令注册表执行 → 热更新画板 =====
@@ -2764,7 +2780,7 @@
       try {
         const res = await fetch("/api/save-chapter", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ createChapter: tpl }) });
         const out = await res.json();
-        if (out.ok) location.href = `/index.html?edit=${id}&_=${Date.now()}`;
+        if (out.ok) location.href = `index.html?edit=${id}&_=${Date.now()}`;
         else showClueToast(out.error || "未知错误", "⚠️ 创建失败");
       } catch (e) { showClueToast("server 未运行?(要跑 python3 server.py)", "⚠️ 创建失败"); }
     }
@@ -2952,7 +2968,7 @@
       // "07号调查员"卡 → 进 worldmap
       $("#lpEnter07").onclick = () => showWorldMapView();
       // "🛠 进编辑器"按钮 → 直跳 ch4 编辑器(场景 3/4 入口)
-      $("#lpEditCh4").onclick = () => { location.href = `/index.html?edit=ch4&_=${Date.now()}`; };
+      $("#lpEditCh4").onclick = () => { location.href = `index.html?edit=ch4&_=${Date.now()}`; };
       // 新建项目:弹模板选择器(引导机制=模板即引导),选一个起手式 → POST 追加一章 → 进编辑器
       // F7-B 免费层拦截:免费版限 1 个用户项目(07号是预置样品,不计);已有 draft 时弹升级
       $("#lpNewProject").onclick = () => {
@@ -3188,9 +3204,12 @@
       o.font = `500 ${Math.min(innerWidth * 0.082, 100) * DPR}px Georgia, "Songti SC", serif`;
       o.textBaseline = "middle";
       o.fillText("07号调查员", innerWidth * 0.09 * DPR, innerHeight * 0.45 * DPR);
-      const idata = o.getImageData(0, 0, W, H).data, tgts = [], step = Math.max(3, Math.round(4 * DPR));
-      for (let y = 0; y < H; y += step) for (let x = 0; x < W; x += step)
-        if (idata[(y * W + x) * 4 + 3] > 100) tgts.push({ x, y });
+      const tgts = [], step = Math.max(3, Math.round(4 * DPR));
+      try { // webview 初始化瞬间 innerWidth 可能为 0,getImageData 会抛 IndexSizeError——不能让它炸掉后面的按钮绑定
+        const idata = o.getImageData(0, 0, W, H).data;
+        for (let y = 0; y < H; y += step) for (let x = 0; x < W; x += step)
+          if (idata[(y * W + x) * 4 + 3] > 100) tgts.push({ x, y });
+      } catch (e) { /* tgts 留空 → 粒子走随机目标兜底 */ }
       const LAYERS = [
         { n: 380, r: [0.4, 0.8], sp: 0.10, alpha: 0.30, par: 10 },
         { n: 300, r: [0.7, 1.4], sp: 0.20, alpha: 0.55, par: 26 },
@@ -3339,6 +3358,7 @@
           window.__readerMode = true;
           document.body.classList.add("reader-mode");
           showWorldMapView();
+          showReaderWelcome(); // 零上下文观众:一次性欢迎条,3 秒内知道这是什么、点哪
           if (params.get("readerprobe") === "1") setTimeout(() => {
             const rm = document.body.classList.contains("reader-mode");
             const world = !$("#worldmap").classList.contains("hide");
@@ -4245,7 +4265,7 @@
     };
     window.__enterEditor = (id) => {
       // 进编辑器 = 跳 URL(setupEditor 在 BootScene.create 里处理 ?edit=)
-      location.href = `/index.html?edit=${id}&_=${Date.now()}`;
+      location.href = `index.html?edit=${id}&_=${Date.now()}`;
     };
     window.__backToWorld = () => {
       // 在"从区域进的设施"里返回 → 回区域大地图;否则回世界图

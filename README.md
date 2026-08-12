@@ -4,7 +4,7 @@
 
 ![游戏画面](docs/readme-assets/game.png)
 
-**[在线试玩《07 号调查员》](https://roam-bit.github.io/fengling-workshop/index.html?play=project)** · 手机可直接打开，建议横屏。
+**[在线试玩《07 号调查员》](https://roam-bit.github.io/fengling-workshop/index.html?play=project)** · 手机可直接打开（建议横屏）；想试编辑器请用电脑。
 
 ## ✨ 这是什么
 
@@ -18,14 +18,14 @@
 ## 🎮 快速开始
 
 ```bash
-git clone <your-repo-url> fengling-workshop
+git clone https://github.com/roam-bit/fengling-workshop.git
 cd fengling-workshop
-python3 server.py            # 启动本地 server（端口 8131，仅用 Python 标准库）
+python3 server.py            # 启动本地 server（端口 8131，仅用 Python 标准库，零依赖不用 pip）
 ```
 
 然后浏览器打开 **http://127.0.0.1:8131**。
 
-> macOS 用户也可以直接双击 `启动凤翎工坊.command`。
+> macOS 用户也可以直接双击 `启动凤翎工坊.command`；Windows 用户用 `python server.py`（同样零依赖）。
 
 - **只想看 demo？** 进去就是世界地图，点亮的区域走进去玩。
 - **想试编辑器？** 打开 `http://localhost:8131/index.html?edit=area_city`。
@@ -79,7 +79,7 @@ cp .ai_key.example .ai_key
 ## 🧪 测试
 
 ```bash
-python3 test/e2e_smoke.py     # 197 项端到端确定性检查（需先起 server）
+python3 test/e2e_smoke.py     # 200+ 项端到端确定性检查（需先起 server）
 ```
 
 用 headless Chrome ＋ Python 对真实 server 做确定性验证，覆盖：数据完整性 / 碰撞连通（BFS）/ 拖拽存盘往返 / AI 命令落盘 / 语义编译 / 发布门 / 读者模式等全链路。
@@ -93,9 +93,18 @@ chapters.json       游戏数据（单一数据源）
 phaser.min.js       Phaser 引擎（本地化，离线可跑）
 art/                美术管线（处理脚本 ＋ out/ 量化素材 ＋ 生图指南）
 docs/               技术文档（三系统设计 / 美术生图规格卡）
-test/e2e_smoke.py   E2E 冒烟测试（197 项）
+test/e2e_smoke.py   E2E 冒烟测试（200+ 项）
+AGENTS.md           给 AI 编程工具的项目地图（用 Codex / Claude Code 改这个项目前先读它）
 启动凤翎工坊.command   macOS 一键启动器
 ```
+
+## 🛠️ 想自己改它？（AI 编程友好）
+
+这个项目就是全程 AI 辅助开发的，也为"被 AI 修改"做了准备：
+
+- **改剧情 / 地图 / NPC / 对话 / 机制**：不用碰代码——打开编辑器（`?edit=章节id`）可视化改，或直接编辑 `chapters.json`（单一数据源）。
+- **用 Codex / Claude Code / Cursor 改代码**：仓库根目录的 [`AGENTS.md`](AGENTS.md) 是给 AI 工具的项目地图（架构、改法配方、验证方式、已知坑），AI 会自动读取它。
+- **改完怎么验证**：起 server 后跑 `python3 test/e2e_smoke.py`，200+ 项自动检查全绿即可放心。
 
 ## 📜 License
 

@@ -9,7 +9,10 @@
 """
 import http.server
 import socketserver
-import fcntl
+try:
+    import fcntl  # Unix 进程间文件锁;Windows 无此模块
+except ImportError:
+    fcntl = None  # Windows:退化为仅线程锁(单人本地跑足够,见 chapters_write_lock)
 import functools
 import json
 import os
@@ -36,6 +39,8 @@ def chapters_write_lock(fn):
     @functools.wraps(fn)
     def wrapped(*args, **kwargs):
         with _CHAPTERS_THREAD_LOCK:
+            if fcntl is None:  # Windows:线程锁已串行化本进程写入,跨进程锁跳过
+                return fn(*args, **kwargs)
             lock_path = ROOT / '.chapters.lock'
             with lock_path.open('a+', encoding='utf-8') as lock_file:
                 fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
