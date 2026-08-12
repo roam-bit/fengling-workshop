@@ -698,12 +698,14 @@
     #dialog { bottom: 7px; width: calc(100vw - 14px); max-width: none; max-height: 55vh; overflow-y: auto; padding: 13px 14px 11px; border-radius: 11px; }
     #dialog .dlg-text { font-size: 14px; line-height: 1.65; min-height: 36px; }
     #dialog .dlg-choices button { padding: 10px 11px; min-height: 42px; }
-    #topbar { left: 0; right: 0; padding: 8px 10px; gap: 7px; justify-content: flex-end; flex-wrap: wrap; }
-    #countdown { font-size: 10px; padding: 5px 8px; }
-    #recordsBtn, #lpHomeBtn, #editorBtn { padding: 6px 9px; font-size: 10px; }
-    .wm2-stage { width: 100vw; max-height: 82vh; }
+    #topbar { left: 0; right: 0; width: auto; max-width: 100vw; box-sizing: border-box; padding: 8px 8px; gap: 6px; justify-content: flex-end; flex-wrap: wrap; }
+    #countdown { font-size: 10px; padding: 5px 7px; flex: 0 1 auto; }
+    #recordsBtn, #lpHomeBtn, #editorBtn { padding: 6px 8px; font-size: 10px; flex: 0 1 auto; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    /* 竖屏留安全边距:地图最右地点在 93% 处,标签半宽会溢出被 #worldmap 的 overflow:hidden 切掉 */
+    .wm2-stage { width: 88vw; margin: 0 auto; max-height: 82vh; }
     .wm2-badge { width: 44px; height: 44px; }
-    .wm2-loc { width: 104px; }
+    .wm2-loc { width: 92px; }
+    .wm2-locname { font-size: 10px; }
     #detail { width: 100%; max-width: 100vw; top: 38%; border-left: 0; border-top: 1px solid #6fd3c433; }
     #worldmap.panel-open .wm2-stage { transform: translateY(-18vh) scale(.88); }
   }

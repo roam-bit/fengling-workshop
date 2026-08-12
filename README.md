@@ -17,6 +17,8 @@
 
 ## 🎮 快速开始
 
+**前置要求只有一个：Python 3.8+**（macOS 自带，Windows 从 [python.org](https://www.python.org/downloads/) 或微软商店免费装）。不需要 pip 装任何东西，不需要 node/npm。
+
 ```bash
 git clone https://github.com/roam-bit/fengling-workshop.git
 cd fengling-workshop
@@ -25,7 +27,8 @@ python3 server.py            # 启动本地 server（端口 8131，仅用 Python
 
 然后浏览器打开 **http://127.0.0.1:8131**。
 
-> macOS 用户也可以直接双击 `启动凤翎工坊.command`；Windows 用户用 `python server.py`（同样零依赖）。
+> 没装 git？直接点仓库页面的 **Code → Download ZIP**，解压后进入目录跑 `python3 server.py` 一样用。
+> macOS 也可以直接双击 `启动凤翎工坊.command`（ZIP 解压的用户若双击无效，用上面的命令行方式）；Windows 用 `python server.py`。
 
 - **只想看 demo？** 进去就是世界地图，点亮的区域走进去玩。
 - **想试编辑器？** 打开 `http://localhost:8131/index.html?edit=area_city`。
